@@ -124,33 +124,49 @@ if (avisoCookies) {
 // Administracao: menu lateral recolhivel, grupos e submenus independentes
 const adminLateral = document.getElementById('admin-lateral');
 const adminToggle = document.querySelector('[data-admin-toggle]');
-adminToggle?.addEventListener('click', () => {
-    const aberto = adminLateral.classList.toggle('aberto');
-    adminToggle.setAttribute('aria-expanded', aberto);
+const adminFundo = document.querySelector('[data-admin-fundo]');
+const lerPreferencia = (chave) => { try { return localStorage.getItem(chave); } catch { return null; } };
+const guardarPreferencia = (chave, valor) => { try { localStorage.setItem(chave, valor); } catch { /* sem armazenamento */ } };
+const abrirMenuAdmin = (aberto) => {
+    adminLateral?.classList.toggle('aberto', aberto);
+    adminToggle?.setAttribute('aria-expanded', String(aberto));
+    if (adminFundo) adminFundo.hidden = !aberto;
+};
+adminToggle?.addEventListener('click', () => abrirMenuAdmin(!adminLateral.classList.contains('aberto')));
+adminFundo?.addEventListener('click', () => abrirMenuAdmin(false));
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && adminLateral?.classList.contains('aberto')) abrirMenuAdmin(false);
 });
 const adminRecolher = document.querySelector('[data-admin-recolher]');
-if (adminRecolher && localStorage.getItem('cda_admin_menu') === 'recolhido') {
-    document.body.classList.add('admin-recolhido');
-}
+const marcarRecolhido = (recolhido) => {
+    document.body.classList.toggle('admin-recolhido', recolhido);
+    adminRecolher?.setAttribute('aria-label', recolhido ? 'Expandir menu' : 'Recolher menu');
+    const texto = adminRecolher?.querySelector('span');
+    if (texto) texto.textContent = recolhido ? 'Expandir menu' : 'Recolher menu';
+};
+if (adminRecolher && lerPreferencia('cda_admin_menu') === 'recolhido') marcarRecolhido(true);
 adminRecolher?.addEventListener('click', () => {
-    const recolhido = document.body.classList.toggle('admin-recolhido');
-    localStorage.setItem('cda_admin_menu', recolhido ? 'recolhido' : 'expandido');
-    adminRecolher.setAttribute('aria-label', recolhido ? 'Expandir menu' : 'Recolher menu');
+    const recolhido = !document.body.classList.contains('admin-recolhido');
+    marcarRecolhido(recolhido);
+    guardarPreferencia('cda_admin_menu', recolhido ? 'recolhido' : 'expandido');
 });
+// Grupos do menu: lembra os que foram fechados, mas o grupo da pagina aberta fica sempre visivel.
+let gruposFechados = [];
+try { gruposFechados = JSON.parse(lerPreferencia('cda_admin_grupos') || '[]'); } catch { gruposFechados = []; }
 document.querySelectorAll('[data-admin-grupo]').forEach((botao) => {
+    const id = botao.getAttribute('aria-controls');
+    const conteudo = document.getElementById(id);
+    const definir = (aberto) => {
+        botao.setAttribute('aria-expanded', String(aberto));
+        conteudo.hidden = !aberto;
+    };
+    if (gruposFechados.includes(id) && !botao.hasAttribute('data-grupo-activo')) definir(false);
     botao.addEventListener('click', () => {
-        const conteudo = document.getElementById(botao.getAttribute('aria-controls'));
-        const aberto = botao.getAttribute('aria-expanded') === 'true';
-        botao.setAttribute('aria-expanded', String(!aberto));
-        conteudo.hidden = aberto;
-    });
-});
-document.querySelectorAll('[data-admin-sub-toggle]').forEach((botao) => {
-    botao.addEventListener('click', () => {
-        const submenu = botao.closest('li').querySelector('.admin-sub');
-        const aberto = botao.getAttribute('aria-expanded') === 'true';
-        botao.setAttribute('aria-expanded', String(!aberto));
-        submenu.hidden = aberto;
+        const aberto = botao.getAttribute('aria-expanded') !== 'true';
+        definir(aberto);
+        gruposFechados = gruposFechados.filter((g) => g !== id);
+        if (!aberto) gruposFechados.push(id);
+        guardarPreferencia('cda_admin_grupos', JSON.stringify(gruposFechados));
     });
 });
 

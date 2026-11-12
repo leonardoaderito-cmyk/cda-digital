@@ -139,10 +139,10 @@
 </div>
 
 <section class="acessos mt-10 mb-8" aria-label="Acesso rápido">
-    @foreach ([['Documentos','Legislação, circulares e formulários','documentos','M6 2h9l5 5v15H6z'],['Directório','Despachantes aduaneiros registados','directorio','M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM4 21a8 8 0 0 1 16 0'],['Área do membro','Quotas e requerimentos','login','M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4'],['Contactos','Fale com a CDA','contactos','M4 4h16v13H8l-4 4z']] as [$t,$d,$rota,$icone])
+    @foreach ([['Documentos','Legislação, circulares e formulários','documentos','description'],['Directório','Despachantes aduaneiros registados','directorio','badge'],['Área do membro','Quotas e requerimentos','login','person'],['Contactos','Fale com a CDA','contactos','contact_support']] as [$t,$d,$rota,$icone])
         @continue($rota !== 'login' && ! \App\Models\Pagina::estaActiva($rota))
         <a href="{{ route($rota) }}" class="acesso">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="{{ $icone }}"/></svg>
+            <x-icone :nome="$icone" />
             <span><strong>{{ $t }}</strong><span>{{ $d }}</span></span>
         </a>
     @endforeach

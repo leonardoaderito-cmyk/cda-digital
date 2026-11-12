@@ -151,6 +151,13 @@ class PortalTest extends TestCase
             'talao_enviado_em' => now(),
         ]);
 
+        // O menu lateral mostra so o que o gestor financeiro pode abrir, com o talao por validar assinalado
+        $this->actingAs($gestor)->get('/admin')->assertOk()
+            ->assertSee('1 talão por validar', false)
+            ->assertSeeInOrder(['Painel', 'Membros', 'Quotas'])
+            ->assertDontSee('Site público')
+            ->assertDontSee('Utilizadores e acessos');
+
         $this->actingAs($gestor)->post("/admin/quotas/{$quota->id}/talao", ['accao' => 'validar'])
             ->assertRedirect()
             ->assertSessionHas('estado');
@@ -172,6 +179,11 @@ class PortalTest extends TestCase
         $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
         $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'T', 'texto' => 'X', 'data' => '2026-01-01']);
         $this->assertDatabaseHas('auditoria', ['accao' => 'admin.noticias.guardar', 'user_id' => $admin->id]);
+
+        // O administrador geral ve todos os grupos do menu, por ordem, e o atalho para adicionar noticias
+        $this->actingAs($admin)->get('/admin/noticias')
+            ->assertSeeInOrder(['Painel', 'Site público', 'Ficheiros', 'Membros', 'Comunicação', 'Sistema', 'Ver o site'])
+            ->assertSee('aria-label="Adicionar em Notícias"', false);
     }
 
     public function test_conta_inactiva_nao_entra(): void
