@@ -24,7 +24,7 @@
         @if ($destaques->isNotEmpty())
         <section data-carrossel class="carrossel mb-8" aria-label="Destaques">
             @foreach ($destaques as $d)
-                <article data-slide class="slide {{ $d['imagem'] ? '' : 'slide-sem-imagem' }}">
+                <article data-slide class="slide {{ $loop->first ? 'slide-activo' : '' }} {{ $d['imagem'] ? '' : 'slide-sem-imagem' }}">
                     @if ($d['imagem'])<img src="{{ $d['imagem'] }}" alt="" class="slide-imagem">@endif
                     <div class="slide-texto">
                         @if ($d['etiqueta'])<span class="slide-etiqueta">{{ $d['etiqueta'] }}</span>@endif
