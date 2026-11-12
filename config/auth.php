@@ -96,7 +96,7 @@ return [
         'users' => [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
-            'expire' => 60,
+            'expire' => 4320, // 72 horas: a ligacao das primeiras credenciais tem de dar tempo ao membro
             'throttle' => 60,
         ],
     ],

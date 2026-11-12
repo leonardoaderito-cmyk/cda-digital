@@ -121,11 +121,37 @@ if (avisoCookies) {
     }));
 }
 
-// Administracao: menu lateral no telemovel
+// Administracao: menu lateral recolhivel, grupos e submenus independentes
+const adminLateral = document.getElementById('admin-lateral');
 const adminToggle = document.querySelector('[data-admin-toggle]');
 adminToggle?.addEventListener('click', () => {
-    const aberto = document.getElementById('admin-lateral').classList.toggle('aberto');
+    const aberto = adminLateral.classList.toggle('aberto');
     adminToggle.setAttribute('aria-expanded', aberto);
+});
+const adminRecolher = document.querySelector('[data-admin-recolher]');
+if (adminRecolher && localStorage.getItem('cda_admin_menu') === 'recolhido') {
+    document.body.classList.add('admin-recolhido');
+}
+adminRecolher?.addEventListener('click', () => {
+    const recolhido = document.body.classList.toggle('admin-recolhido');
+    localStorage.setItem('cda_admin_menu', recolhido ? 'recolhido' : 'expandido');
+    adminRecolher.setAttribute('aria-label', recolhido ? 'Expandir menu' : 'Recolher menu');
+});
+document.querySelectorAll('[data-admin-grupo]').forEach((botao) => {
+    botao.addEventListener('click', () => {
+        const conteudo = document.getElementById(botao.getAttribute('aria-controls'));
+        const aberto = botao.getAttribute('aria-expanded') === 'true';
+        botao.setAttribute('aria-expanded', String(!aberto));
+        conteudo.hidden = aberto;
+    });
+});
+document.querySelectorAll('[data-admin-sub-toggle]').forEach((botao) => {
+    botao.addEventListener('click', () => {
+        const submenu = botao.closest('li').querySelector('.admin-sub');
+        const aberto = botao.getAttribute('aria-expanded') === 'true';
+        botao.setAttribute('aria-expanded', String(!aberto));
+        submenu.hidden = aberto;
+    });
 });
 
 // Administracao: janela da biblioteca de imagens (usada pelo editor e pela imagem de destaque)

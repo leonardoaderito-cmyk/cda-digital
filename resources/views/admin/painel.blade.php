@@ -1,30 +1,41 @@
 @extends('layouts.admin')
 @section('titulo', 'Painel')
 @section('conteudo')
-<div class="admin-cabecalho"><h1>Painel</h1></div>
+<div class="admin-cabecalho"><div><h1>Painel</h1><p class="text-sm text-zinc-600">{{ auth()->user()->nivelLabel() }}</p></div></div>
 
 <div class="admin-grelha">
+    @if(auth()->user()->pode('membros.ver') || auth()->user()->pode('comunicacao.gerir'))
     <section class="admin-caixa">
         <h2>Por tratar</h2>
         <ul class="admin-lista-num">
-            @foreach ([['Contas pendentes de aprovação', $pendentes, 'admin.membros'], ['Requerimentos em análise', $requerimentos, 'admin.requerimentos'], ['Mensagens por ler', $mensagens, 'admin.mensagens']] as [$r, $n, $rota])
+            @foreach ([['Contas pendentes de aprovação', $pendentes, 'admin.membros', 'membros.ver'], ['Requerimentos em análise', $requerimentos, 'admin.requerimentos', 'membros.ver'], ['Mensagens por ler', $mensagens, 'admin.mensagens', 'comunicacao.gerir']] as [$r, $n, $rota, $permissao])
+                @if(auth()->user()->pode($permissao))
                 <li><a href="{{ route($rota) }}"><strong class="{{ $n ? 'com-pendentes' : '' }}">{{ $n }}</strong><span>{{ $r }}</span></a></li>
+                @endif
             @endforeach
         </ul>
     </section>
+    @endif
 
+    @if(auth()->user()->pode('conteudo.gerir') || auth()->user()->pode('comunicacao.gerir'))
     <section class="admin-caixa">
         <h2>Num relance</h2>
         <ul class="admin-relance">
+            @if(auth()->user()->pode('conteudo.gerir'))
             <li><a href="{{ route('admin.paginas') }}">{{ $paginas }} páginas</a>@if ($paginasInactivas) <small>({{ $paginasInactivas }} desactivadas)</small>@endif</li>
             <li><a href="{{ route('admin.noticias') }}">{{ $noticias }} notícias</a></li>
             <li><a href="{{ route('admin.eventos') }}">{{ $eventos }} eventos</a></li>
             <li><a href="{{ route('admin.imagens') }}">{{ $imagens }} imagens</a></li>
             <li><a href="{{ route('admin.documentos') }}">{{ $documentos }} documentos</a></li>
+            @endif
+            @if(auth()->user()->pode('comunicacao.gerir'))
             <li><a href="{{ route('admin.newsletter') }}">{{ $subscritores }} subscritores</a></li>
+            @endif
         </ul>
     </section>
+    @endif
 
+    @if(auth()->user()->pode('conteudo.gerir'))
     <section class="admin-caixa">
         <h2>Atalhos</h2>
         <div class="admin-atalhos">
@@ -46,16 +57,7 @@
             @endforelse
         </ul>
     </section>
+    @endif
 
-    <section class="admin-caixa admin-caixa-larga">
-        <h2>Actividade recente na administração</h2>
-        <ul class="admin-recentes">
-            @forelse ($actividade as $a)
-                <li><span>{{ \Illuminate\Support\Carbon::parse($a->created_at)->format('d/m/Y H:i') }}</span>{{ $utilizadores[$a->user_id] ?? 'Sistema' }} &middot; <code>{{ $a->accao }}</code>@if ($a->detalhe) <small>{{ $a->detalhe }}</small>@endif</li>
-            @empty
-                <li>Sem actividade registada.</li>
-            @endforelse
-        </ul>
-    </section>
 </div>
 @endsection

@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\PaginaController as AdminPaginaController;
 use App\Http\Controllers\Admin\SlideController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegistoController;
+use App\Http\Controllers\Auth\SenhaController;
 use App\Http\Controllers\MembroController;
 use App\Http\Controllers\PaginaController;
 use App\Http\Controllers\PublicoController;
@@ -17,6 +18,8 @@ foreach (['instituicao', 'historia', 'orgaos', 'estatutos', 'parceiros', 'cookie
     Route::get('/'.$pagina, [PaginaController::class, 'mostrar'])->name($pagina);
 }
 Route::get('/pagina/{slug}', [PaginaController::class, 'mostrar'])->name('pagina');
+Route::get('/verificar-regularidade/{user}', [MembroController::class, 'verificarRegularidade'])
+    ->middleware('signed')->name('regularidade.verificar');
 
 Route::controller(PublicoController::class)->group(function () {
     Route::get('/', 'inicio')->name('inicio');
@@ -48,41 +51,57 @@ Route::middleware('guest')->group(function () {
     Route::post('/entrar', [LoginController::class, 'store'])->middleware('throttle:5,1');
     Route::get('/registar', [RegistoController::class, 'create'])->name('registo');
     Route::post('/registar', [RegistoController::class, 'store'])->middleware('throttle:5,10');
+    Route::get('/recuperar-senha', [SenhaController::class, 'pedir'])->name('password.request');
+    Route::post('/recuperar-senha', [SenhaController::class, 'enviar'])->middleware('throttle:3,10')->name('password.email');
+    Route::get('/definir-senha/{token}', [SenhaController::class, 'editar'])->name('password.reset');
+    Route::post('/definir-senha', [SenhaController::class, 'actualizar'])->name('password.update');
 });
 
 Route::middleware('auth')->group(function () {
     Route::post('/sair', [LoginController::class, 'destroy'])->name('logout');
     Route::get('/membro', [MembroController::class, 'area'])->name('membro.area');
     Route::post('/membro/requerimentos', [MembroController::class, 'requerimento'])->name('membro.requerimento');
+    Route::post('/membro/senha', [MembroController::class, 'alterarSenha'])->name('membro.senha');
+    Route::get('/membro/quotas/{quota}/comprovativo', [MembroController::class, 'comprovativo'])->name('membro.comprovativo');
+    Route::get('/membro/quotas/{quota}/comprovativo/descarregar', [MembroController::class, 'descarregarComprovativo'])->name('membro.comprovativo.descarregar');
+    Route::get('/membro/declaracao-quitacao', [MembroController::class, 'declaracao'])->name('membro.declaracao');
+    Route::get('/membro/declaracao-quitacao/descarregar', [MembroController::class, 'descarregarDeclaracao'])->name('membro.declaracao.descarregar');
 });
 
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->controller(AdminController::class)->group(function () {
     Route::get('/', 'painel')->name('painel');
-    Route::get('/membros', 'membros')->name('membros');
-    Route::post('/membros/{user}/aprovar', 'aprovar')->name('membros.aprovar');
-    Route::post('/membros/{user}/desactivar', 'desactivar')->name('membros.desactivar');
-    Route::get('/quotas', 'quotas')->name('quotas');
-    Route::post('/quotas/{quota}', 'actualizarQuota')->name('quotas.actualizar');
-    Route::get('/requerimentos', 'requerimentos')->name('requerimentos');
-    Route::post('/requerimentos/{requerimento}', 'responderRequerimento')->name('requerimentos.responder');
-    Route::get('/documentos', 'documentos')->name('documentos');
-    Route::post('/documentos', 'guardarDocumento')->name('documentos.guardar');
-    Route::delete('/documentos/{documento}', 'apagarDocumento')->name('documentos.apagar');
-    Route::get('/noticias', 'noticias')->name('noticias');
-    Route::get('/noticias/nova', 'novaNoticia')->name('noticias.nova');
-    Route::post('/noticias', 'guardarNoticia')->name('noticias.guardar');
-    Route::get('/noticias/{noticia}/editar', 'editarNoticia')->name('noticias.editar');
-    Route::post('/noticias/{noticia}', 'actualizarNoticia')->name('noticias.actualizar');
-    Route::post('/noticias/{noticia}/alternar', 'alternarNoticia')->name('noticias.alternar');
-    Route::delete('/noticias/{noticia}', 'apagarNoticia')->name('noticias.apagar');
-    Route::get('/mensagens', 'mensagens')->name('mensagens');
-    Route::post('/mensagens/{mensagem}/ler', 'lerMensagem')->name('mensagens.ler');
-    Route::get('/newsletter', 'newsletter')->name('newsletter');
-    Route::get('/newsletter/exportar', 'exportarNewsletter')->name('newsletter.exportar');
-    Route::post('/newsletter/{newsletterSubscricao}/alternar', 'alternarNewsletter')->name('newsletter.alternar');
+    Route::get('/utilizadores', 'utilizadores')->middleware('permissao:utilizadores.gerir')->name('utilizadores');
+    Route::post('/utilizadores', 'criarUtilizador')->middleware('permissao:utilizadores.gerir')->name('utilizadores.criar');
+    Route::post('/utilizadores/{user}', 'actualizarUtilizador')->middleware('permissao:utilizadores.gerir')->name('utilizadores.actualizar');
+    Route::post('/utilizadores/{user}/credenciais', 'enviarAcessoAdmin')->middleware('permissao:utilizadores.gerir')->name('utilizadores.credenciais');
+    Route::get('/membros', 'membros')->middleware('permissao:membros.ver')->name('membros');
+    Route::post('/membros', 'criarMembro')->middleware('permissao:membros.gerir')->name('membros.criar');
+    Route::post('/membros/{user}/aprovar', 'aprovar')->middleware('permissao:membros.gerir')->name('membros.aprovar');
+    Route::post('/membros/{user}/desactivar', 'desactivar')->middleware('permissao:membros.gerir')->name('membros.desactivar');
+    Route::post('/membros/{user}/credenciais', 'enviarCredenciais')->middleware('permissao:membros.gerir')->name('membros.credenciais');
+    Route::get('/quotas', 'quotas')->middleware('permissao:financeiro.ver')->name('quotas');
+    Route::post('/quotas', 'criarQuota')->middleware('permissao:financeiro.gerir')->name('quotas.criar');
+    Route::post('/quotas/{quota}', 'actualizarQuota')->middleware('permissao:financeiro.gerir')->name('quotas.actualizar');
+    Route::get('/requerimentos', 'requerimentos')->middleware('permissao:membros.ver')->name('requerimentos');
+    Route::post('/requerimentos/{requerimento}', 'responderRequerimento')->middleware('permissao:requerimentos.gerir')->name('requerimentos.responder');
+    Route::get('/documentos', 'documentos')->middleware('permissao:conteudo.gerir')->name('documentos');
+    Route::post('/documentos', 'guardarDocumento')->middleware('permissao:conteudo.gerir')->name('documentos.guardar');
+    Route::delete('/documentos/{documento}', 'apagarDocumento')->middleware('permissao:conteudo.gerir')->name('documentos.apagar');
+    Route::get('/noticias', 'noticias')->middleware('permissao:conteudo.gerir')->name('noticias');
+    Route::get('/noticias/nova', 'novaNoticia')->middleware('permissao:conteudo.gerir')->name('noticias.nova');
+    Route::post('/noticias', 'guardarNoticia')->middleware('permissao:conteudo.gerir')->name('noticias.guardar');
+    Route::get('/noticias/{noticia}/editar', 'editarNoticia')->middleware('permissao:conteudo.gerir')->name('noticias.editar');
+    Route::post('/noticias/{noticia}', 'actualizarNoticia')->middleware('permissao:conteudo.gerir')->name('noticias.actualizar');
+    Route::post('/noticias/{noticia}/alternar', 'alternarNoticia')->middleware('permissao:conteudo.gerir')->name('noticias.alternar');
+    Route::delete('/noticias/{noticia}', 'apagarNoticia')->middleware('permissao:conteudo.gerir')->name('noticias.apagar');
+    Route::get('/mensagens', 'mensagens')->middleware('permissao:comunicacao.gerir')->name('mensagens');
+    Route::post('/mensagens/{mensagem}/ler', 'lerMensagem')->middleware('permissao:comunicacao.gerir')->name('mensagens.ler');
+    Route::get('/newsletter', 'newsletter')->middleware('permissao:comunicacao.gerir')->name('newsletter');
+    Route::get('/newsletter/exportar', 'exportarNewsletter')->middleware('permissao:comunicacao.gerir')->name('newsletter.exportar');
+    Route::post('/newsletter/{newsletterSubscricao}/alternar', 'alternarNewsletter')->middleware('permissao:comunicacao.gerir')->name('newsletter.alternar');
 });
 
-Route::prefix('admin/eventos')->name('admin.eventos')->middleware(['auth', 'admin'])->controller(EventoController::class)->group(function () {
+Route::prefix('admin/eventos')->name('admin.eventos')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(EventoController::class)->group(function () {
     Route::get('/', 'index')->name('');
     Route::get('/novo', 'create')->name('.novo');
     Route::post('/', 'store')->name('.guardar');
@@ -92,7 +111,7 @@ Route::prefix('admin/eventos')->name('admin.eventos')->middleware(['auth', 'admi
     Route::delete('/{evento}', 'destroy')->name('.apagar');
 });
 
-Route::prefix('admin/paginas')->name('admin.paginas')->middleware(['auth', 'admin'])->controller(AdminPaginaController::class)->group(function () {
+Route::prefix('admin/paginas')->name('admin.paginas')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(AdminPaginaController::class)->group(function () {
     Route::get('/', 'index')->name('');
     Route::get('/nova', 'create')->name('.nova');
     Route::post('/', 'store')->name('.guardar');
@@ -102,7 +121,7 @@ Route::prefix('admin/paginas')->name('admin.paginas')->middleware(['auth', 'admi
     Route::delete('/{pagina}', 'destroy')->name('.apagar');
 });
 
-Route::prefix('admin/carrossel')->name('admin.slides')->middleware(['auth', 'admin'])->controller(SlideController::class)->group(function () {
+Route::prefix('admin/carrossel')->name('admin.slides')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(SlideController::class)->group(function () {
     Route::get('/', 'index')->name('');
     Route::get('/novo', 'create')->name('.novo');
     Route::post('/', 'store')->name('.guardar');
@@ -114,7 +133,7 @@ Route::prefix('admin/carrossel')->name('admin.slides')->middleware(['auth', 'adm
     Route::delete('/{slide}', 'destroy')->name('.apagar');
 });
 
-Route::prefix('admin/imagens')->name('admin.imagens')->middleware(['auth', 'admin'])->controller(ImagemController::class)->group(function () {
+Route::prefix('admin/imagens')->name('admin.imagens')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(ImagemController::class)->group(function () {
     Route::get('/', 'index')->name('');
     Route::post('/', 'store')->name('.guardar');
     Route::post('/{imagem}', 'update')->name('.actualizar');

@@ -22,6 +22,8 @@ Artisan::command('cda:admin {email} {--nome=}', function () {
         'email' => $email,
         'is_admin' => true,
         'ativo' => true,
+        // Sem nivel de administrador geral a conta ficaria sem acesso a nenhuma seccao
+        'nivel_acesso' => 'super_admin',
     ]);
     if ($nova) {
         // Senha aleatoria que ninguem conhece, ate ser definida abaixo

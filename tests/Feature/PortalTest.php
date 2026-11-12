@@ -4,13 +4,20 @@ namespace Tests\Feature;
 
 use App\Models\Evento;
 use App\Models\Imagem;
+use App\Models\MembroPublico;
 use App\Models\NewsletterSubscricao;
 use App\Models\Noticia;
 use App\Models\Pagina;
+use App\Models\Quota;
 use App\Models\Slide;
 use App\Models\User;
+use App\Notifications\CredenciaisIniciais;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 // Autor: Leonardo (leonardoaderito-cmyk)
@@ -38,7 +45,7 @@ class PortalTest extends TestCase
         $this->get('/')->assertHeader('X-Frame-Options', 'DENY');
 
         $admin = User::factory()->create();
-        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
         $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'T', 'texto' => 'X', 'data' => '2026-01-01']);
         $this->assertDatabaseHas('auditoria', ['accao' => 'admin.noticias.guardar', 'user_id' => $admin->id]);
     }
@@ -70,7 +77,7 @@ class PortalTest extends TestCase
     public function test_admin_cria_evento_e_visitante_ve_pagina_publicada(): void
     {
         $admin = User::factory()->create();
-        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
 
         $this->actingAs($admin)->post('/admin/eventos', [
             'titulo' => 'Conferência Aduaneira',
@@ -93,7 +100,7 @@ class PortalTest extends TestCase
     private function admin(): User
     {
         $admin = User::factory()->create();
-        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
 
         return $admin;
     }
@@ -101,7 +108,7 @@ class PortalTest extends TestCase
     public function test_ecras_da_administracao_respondem(): void
     {
         $admin = $this->admin();
-        foreach (['/admin', '/admin/paginas', '/admin/paginas/nova', '/admin/noticias', '/admin/noticias/nova', '/admin/eventos', '/admin/imagens', '/admin/documentos', '/admin/membros', '/admin/quotas', '/admin/requerimentos', '/admin/mensagens', '/admin/newsletter'] as $url) {
+        foreach (['/admin', '/admin/utilizadores', '/admin/paginas', '/admin/paginas/nova', '/admin/noticias', '/admin/noticias/nova', '/admin/eventos', '/admin/imagens', '/admin/documentos', '/admin/membros', '/admin/quotas', '/admin/requerimentos', '/admin/mensagens', '/admin/newsletter'] as $url) {
             $this->actingAs($admin)->get($url)->assertOk();
         }
         foreach (Pagina::all() as $pagina) {
@@ -211,9 +218,132 @@ class PortalTest extends TestCase
     {
         NewsletterSubscricao::create(['email' => 'membro@cda.mz']);
         $admin = User::factory()->create();
-        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
 
         $this->actingAs($admin)->get('/admin/newsletter')->assertOk()->assertSee('membro@cda.mz');
         $this->actingAs($admin)->get('/admin/newsletter/exportar')->assertOk();
+    }
+
+    public function test_admin_cria_conta_e_envia_primeiras_credenciais(): void
+    {
+        Notification::fake();
+        $admin = $this->admin();
+        $registo = MembroPublico::create([
+            'nome' => 'Amélia Matola',
+            'n_carta' => '123456',
+            'empresa' => 'Matola Despachos',
+            'activo' => true,
+        ]);
+
+        $this->actingAs($admin)->post('/admin/membros', [
+            'membro_publico_id' => $registo->id,
+            'email' => 'amelia@example.com',
+            'telefone' => '841234567',
+        ])->assertRedirect()->assertSessionHas('estado');
+
+        $membro = User::where('carteira', '123456')->firstOrFail();
+        $this->assertTrue($membro->ativo);
+        $this->assertNotNull($membro->credenciais_enviadas_em);
+        $this->assertDatabaseHas('quotas', ['user_id' => $membro->id, 'ano' => now()->year]);
+        Notification::assertSentTo($membro, CredenciaisIniciais::class);
+    }
+
+    public function test_membro_define_senha_e_entra_com_numero(): void
+    {
+        $membro = User::factory()->create([
+            'email' => 'membro@example.com',
+            'carteira' => '987654',
+            'ativo' => true,
+        ]);
+        $token = Password::broker()->createToken($membro);
+
+        $this->post('/definir-senha', [
+            'token' => $token,
+            'email' => $membro->email,
+            'password' => 'NovaSenha123',
+            'password_confirmation' => 'NovaSenha123',
+        ])->assertRedirect(route('login'));
+
+        $membro->refresh();
+        $this->assertTrue(Hash::check('NovaSenha123', $membro->password));
+        $this->assertNotNull($membro->senha_definida_em);
+        $this->post('/entrar', ['identificador' => '987654', 'password' => 'NovaSenha123'])
+            ->assertRedirect(route('membro.area'));
+    }
+
+    public function test_admin_regista_pagamento_e_membro_emite_comprovativo(): void
+    {
+        $admin = $this->admin();
+        $membro = User::factory()->create(['carteira' => '456789', 'ativo' => true]);
+
+        $this->actingAs($admin)->post('/admin/quotas', [
+            'user_id' => $membro->id,
+            'ano' => 2026,
+            'valor' => 7500,
+            'estado' => 'paga',
+            'referencia' => 'REC-2026-001',
+            'data_pagamento' => '2026-11-12',
+        ])->assertRedirect();
+
+        $quota = Quota::where('user_id', $membro->id)->firstOrFail();
+        $pendente = Quota::create(['user_id' => $membro->id, 'ano' => 2025, 'valor' => 5000, 'estado' => 'pendente']);
+        $this->actingAs($admin)->post('/admin/quotas/'.$pendente->id, [
+            'estado' => 'paga',
+            'valor' => 5000,
+            'referencia' => 'REC-2025-001',
+            'data_pagamento' => '',
+        ])->assertRedirect();
+        $this->assertNotNull($pendente->refresh()->data_pagamento);
+
+        $this->actingAs($membro)->get('/membro')->assertOk()->assertSee('Regularizada')->assertSee('7.500 MT');
+        $this->actingAs($membro)->get('/membro/quotas/'.$quota->id.'/comprovativo')
+            ->assertOk()->assertSee('REC-2026-001')->assertSee('CDA-Q');
+    }
+
+    public function test_niveis_de_acesso_separam_adesoes_financas_e_conteudos(): void
+    {
+        $editor = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'editor']);
+        $adesoes = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'adesoes']);
+        $financeiro = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'financeiro']);
+        $standard = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'standard']);
+
+        $this->actingAs($editor)->get('/admin/paginas')->assertOk();
+        $this->actingAs($editor)->get('/admin/membros')->assertForbidden();
+        $this->actingAs($adesoes)->get('/admin/membros')->assertOk();
+        $this->actingAs($adesoes)->get('/admin/quotas')->assertForbidden();
+        $this->actingAs($financeiro)->get('/admin/quotas')->assertOk();
+        $this->actingAs($financeiro)->get('/admin/paginas')->assertForbidden();
+        $this->actingAs($standard)->get('/admin/membros')->assertOk();
+        $this->actingAs($standard)->get('/admin/quotas')->assertOk();
+        $this->actingAs($standard)->post('/admin/quotas', [])->assertForbidden();
+        $this->actingAs($standard)->get('/admin/utilizadores')->assertForbidden();
+    }
+
+    public function test_declaracao_pdf_e_qr_reflectem_regularidade_actual(): void
+    {
+        $membro = User::factory()->create(['carteira' => '777888', 'ativo' => true]);
+        $quota = Quota::create([
+            'user_id' => $membro->id,
+            'ano' => now()->year,
+            'valor' => 7500,
+            'estado' => 'paga',
+            'referencia' => 'Q-REGULAR',
+            'data_pagamento' => now(),
+        ]);
+
+        $this->actingAs($membro)->get('/membro/declaracao-quitacao')
+            ->assertOk()->assertSee('Declaração de quitação')->assertSee('data:image/png;base64,', false);
+        $pdf = $this->actingAs($membro)->get('/membro/declaracao-quitacao/descarregar');
+        $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->actingAs($membro)->get('/membro/quotas/'.$quota->id.'/comprovativo/descarregar')
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+
+        $url = URL::signedRoute('regularidade.verificar', ['user' => $membro->id]);
+        $this->get($url)->assertOk()->assertSee('Situação regularizada');
+
+        $quota->update(['estado' => 'em_atraso', 'data_pagamento' => null]);
+        $this->get($url)->assertOk()->assertSee('Situação não regularizada');
+        $this->actingAs($membro)->get('/membro/declaracao-quitacao')->assertForbidden();
     }
 }

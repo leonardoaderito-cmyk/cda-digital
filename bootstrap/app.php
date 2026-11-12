@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'admin' => \App\Http\Middleware\ApenasAdmin::class,
+            'permissao' => \App\Http\Middleware\PermissaoAdmin::class,
             'pagina' => \App\Http\Middleware\PaginaActiva::class,
         ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\CabecalhosSeguranca::class);

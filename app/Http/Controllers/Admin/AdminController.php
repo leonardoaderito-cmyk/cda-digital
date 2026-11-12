@@ -8,15 +8,20 @@ use App\Models\ContactoMensagem;
 use App\Models\Documento;
 use App\Models\Evento;
 use App\Models\Imagem;
-use App\Models\Pagina;
+use App\Models\MembroPublico;
 use App\Models\NewsletterSubscricao;
 use App\Models\Noticia;
+use App\Models\Pagina;
 use App\Models\Quota;
 use App\Models\Requerimento;
 use App\Models\User;
+use App\Notifications\AcessoAdministrativo;
+use App\Notifications\CredenciaisIniciais;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
@@ -35,16 +40,113 @@ class AdminController extends Controller
             'imagens' => Imagem::count(),
             'subscritores' => NewsletterSubscricao::where('activo', true)->count(),
             'ultimasNoticias' => Noticia::orderByDesc('data')->limit(5)->get(),
-            'actividade' => Auditoria::orderByDesc('id')->limit(8)->get(),
-            'utilizadores' => User::pluck('name', 'id'),
         ]);
+    }
+
+    public function utilizadores()
+    {
+        return view('admin.utilizadores', [
+            'utilizadores' => User::where('is_admin', true)->orderBy('name')->get(),
+            'actividade' => Auditoria::with('user')->orderByDesc('id')->paginate(30),
+            'niveis' => User::NIVEIS_ACESSO,
+        ]);
+    }
+
+    public function criarUtilizador(Request $request): RedirectResponse
+    {
+        $dados = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:160'],
+            'email' => ['required', 'email', 'max:200', 'unique:users,email'],
+            'nivel_acesso' => ['required', Rule::in(array_keys(User::NIVEIS_ACESSO))],
+        ]);
+
+        $user = User::create([
+            'name' => $dados['name'],
+            'email' => Str::lower($dados['email']),
+            'password' => Str::random(48),
+            'nivel_acesso' => $dados['nivel_acesso'],
+        ]);
+        $user->forceFill(['is_admin' => true, 'ativo' => true, 'aprovado_em' => now()])->save();
+        $this->notificarAcessoAdmin($user);
+
+        return back()->with('estado', 'Utilizador administrativo criado e acesso enviado para '.$user->email.'.');
+    }
+
+    public function actualizarUtilizador(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->is_admin, 404);
+        $dados = $request->validate([
+            'nivel_acesso' => ['required', Rule::in(array_keys(User::NIVEIS_ACESSO))],
+            'ativo' => ['nullable', 'boolean'],
+        ]);
+        $activo = $request->boolean('ativo');
+
+        if ($user->id === $request->user()->id && ! $activo) {
+            return back()->withErrors(['ativo' => 'Não pode desactivar a sua própria conta.']);
+        }
+        if ($user->nivel_acesso === 'super_admin'
+            && ($dados['nivel_acesso'] !== 'super_admin' || ! $activo)
+            && User::where('is_admin', true)->where('nivel_acesso', 'super_admin')->where('ativo', true)->count() === 1) {
+            return back()->withErrors(['nivel_acesso' => 'Tem de existir pelo menos um administrador geral activo.']);
+        }
+
+        $user->forceFill(['nivel_acesso' => $dados['nivel_acesso'], 'ativo' => $activo])->save();
+
+        return back()->with('estado', 'Nível de acesso actualizado para '.$user->name.'.');
+    }
+
+    public function enviarAcessoAdmin(User $user): RedirectResponse
+    {
+        abort_unless($user->is_admin, 404);
+        $this->notificarAcessoAdmin($user);
+
+        return back()->with('estado', 'Ligação de acesso reenviada para '.$user->email.'.');
+    }
+
+    private function notificarAcessoAdmin(User $user): void
+    {
+        $token = Password::broker()->createToken($user);
+        $user->notify(new AcessoAdministrativo($token));
+        $user->forceFill(['credenciais_enviadas_em' => now()])->save();
     }
 
     public function membros()
     {
         return view('admin.membros', [
             'membros' => User::where('is_admin', false)->orderBy('ativo')->orderBy('name')->get(),
+            'semConta' => MembroPublico::where('activo', true)
+                ->whereNotIn('n_carta', User::whereNotNull('carteira')->select('carteira'))
+                ->orderBy('nome')->get(),
         ]);
+    }
+
+    public function criarMembro(Request $request): RedirectResponse
+    {
+        $dados = $request->validate([
+            'membro_publico_id' => ['required', 'integer', 'exists:membros_publicos,id'],
+            'email' => ['required', 'email', 'max:200', 'unique:users,email'],
+            'telefone' => ['nullable', 'string', 'max:40'],
+        ]);
+        $registo = MembroPublico::findOrFail($dados['membro_publico_id']);
+        abort_unless($registo->activo, 422);
+
+        if (User::where('carteira', $registo->n_carta)->exists()) {
+            return back()->withErrors(['membro_publico_id' => 'Este membro já tem uma conta.']);
+        }
+
+        $user = User::create([
+            'name' => $registo->nome,
+            'email' => Str::lower($dados['email']),
+            'password' => Str::random(48),
+            'carteira' => $registo->n_carta,
+            'telefone' => $dados['telefone'] ?? null,
+            'entidade' => $registo->empresa,
+        ]);
+        $user->forceFill(['ativo' => true, 'aprovado_em' => now()])->save();
+        Quota::firstOrCreate(['user_id' => $user->id, 'ano' => now()->year]);
+        $this->notificarCredenciais($user);
+
+        return back()->with('estado', 'Conta criada e ligação para definir a senha enviada para '.$user->email.'.');
     }
 
     public function aprovar(User $user): RedirectResponse
@@ -63,11 +165,58 @@ class AdminController extends Controller
         return back()->with('estado', 'Conta desactivada.');
     }
 
+    public function enviarCredenciais(User $user): RedirectResponse
+    {
+        abort_if($user->is_admin, 403);
+        $this->notificarCredenciais($user);
+
+        return back()->with('estado', 'Nova ligação para definir a senha enviada para '.$user->email.'.');
+    }
+
+    private function notificarCredenciais(User $user): void
+    {
+        $token = Password::broker()->createToken($user);
+        $user->notify(new CredenciaisIniciais($token));
+        $user->forceFill(['credenciais_enviadas_em' => now()])->save();
+    }
+
     public function quotas()
     {
+        $quotas = Quota::with('user')->orderByDesc('ano')->orderBy('estado')->get();
+
         return view('admin.quotas', [
-            'quotas' => Quota::with('user')->orderByDesc('ano')->orderBy('estado')->get(),
+            'quotas' => $quotas,
+            'membros' => User::where('is_admin', false)->where('ativo', true)->orderBy('name')->get(),
+            'totalPago' => $quotas->where('estado', 'paga')->sum('valor'),
+            'totalPendente' => $quotas->whereIn('estado', ['pendente', 'em_atraso'])->sum('valor'),
+            'emAtraso' => $quotas->where('estado', 'em_atraso')->count(),
         ]);
+    }
+
+    public function criarQuota(Request $request): RedirectResponse
+    {
+        $dados = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'ano' => [
+                'required', 'integer', 'between:2000,2100',
+                Rule::unique('quotas')->where(fn ($query) => $query->where('user_id', $request->integer('user_id'))),
+            ],
+            'valor' => ['required', 'integer', 'min:0'],
+            'estado' => ['required', 'in:pendente,paga,em_atraso,isenta'],
+            'referencia' => ['nullable', 'string', 'max:120'],
+            'data_pagamento' => ['nullable', 'date'],
+        ]);
+        $membro = User::where('is_admin', false)->findOrFail($dados['user_id']);
+
+        $membro->quotas()->create([
+            'ano' => $dados['ano'],
+            'valor' => $dados['valor'],
+            'estado' => $dados['estado'],
+            'referencia' => $dados['referencia'] ?? null,
+            'data_pagamento' => $dados['estado'] === 'paga' ? ($dados['data_pagamento'] ?? now()) : null,
+        ]);
+
+        return back()->with('estado', 'Quota criada para '.$membro->name.'.');
     }
 
     public function actualizarQuota(Request $request, Quota $quota): RedirectResponse
@@ -76,11 +225,14 @@ class AdminController extends Controller
             'estado' => ['required', 'in:pendente,paga,em_atraso,isenta'],
             'valor' => ['nullable', 'integer', 'min:0'],
             'referencia' => ['nullable', 'string', 'max:120'],
+            'data_pagamento' => ['nullable', 'date'],
         ]);
 
-        $quota->update($dados + [
+        $quota->update([...$dados,
             'valor' => $dados['valor'] ?? $quota->valor,
-            'data_pagamento' => $dados['estado'] === 'paga' ? now() : null,
+            'data_pagamento' => $dados['estado'] === 'paga'
+                ? ($dados['data_pagamento'] ?? $quota->data_pagamento ?? now())
+                : null,
         ]);
 
         return back()->with('estado', 'Quota actualizada.');

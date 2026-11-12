@@ -51,6 +51,7 @@ class RegistoController extends Controller
             'carteira' => $carteira,
             'telefone' => $dados['telefone'] ?? null,
             'entidade' => $dados['entidade'] ?? null,
+            'senha_definida_em' => now(),
         ]);
 
         return redirect()->route('login')->with('estado', 'Conta criada. Aguarde a aprovacao do administrador da CDA.');

@@ -14,6 +14,7 @@ php artisan serve
 - [x] Fase 1: estrutura Laravel, modelos, migrações, importação de membros
 - [x] Fase 2: autenticação, aprovação de contas, quotas e requerimentos
 - [x] Fase 3: painel admin e centro documental
+- [x] Área do membro: acesso por número, primeira senha por email, situação financeira e comprovativos de quotas
 - [x] Fase 4: páginas públicas em Blade (núcleo; faltam páginas institucionais)
 - [x] Eventos: publicação por blocos, agenda pública e gestão administrativa
 - [x] Newsletter: subscrição pública, gestão e exportação CSV no painel

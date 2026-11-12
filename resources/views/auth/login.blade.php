@@ -12,7 +12,10 @@
             <input type="password" name="password" required class="border border-zinc-300 rounded px-3 py-2">
         </label>
         <button class="bg-blue-950 text-white rounded px-4 py-2">Entrar</button>
-        <a href="{{ route('registo') }}" class="text-sm text-blue-800 hover:underline">Ainda não tem conta? Registar</a>
+        <div class="flex flex-wrap justify-between gap-2 text-sm">
+            <a href="{{ route('password.request') }}" class="text-blue-800 hover:underline">Esqueceu a senha?</a>
+            <a href="{{ route('registo') }}" class="text-blue-800 hover:underline">Ainda não tem conta? Registar</a>
+        </div>
     </form>
 </div>
 @endsection
