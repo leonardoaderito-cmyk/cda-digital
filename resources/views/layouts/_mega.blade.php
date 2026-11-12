@@ -37,6 +37,7 @@
         <span class="sr-only">Menu</span>&#9776;
     </button>
     <ul id="mega-lista" class="mega-lista">
+        <li class="mega-item"><a href="{{ route('inicio') }}" class="mega-botao {{ request()->routeIs('inicio') ? 'activo' : '' }}">Página inicial</a></li>
         @foreach ($grupos as $titulo => $g)
             <li class="mega-item" data-mega-item>
                 <button type="button" class="mega-botao" aria-expanded="false" aria-haspopup="true">{{ $titulo }} <span aria-hidden="true">&#9662;</span></button>
@@ -60,6 +61,7 @@
                 </div>
             </li>
         @endforeach
+        <li class="mega-item"><a href="{{ route('eventos') }}" class="mega-botao">Eventos</a></li>
         <li class="mega-item"><a href="{{ route('contactos') }}" class="mega-botao">Contactos</a></li>
     </ul>
 </nav>

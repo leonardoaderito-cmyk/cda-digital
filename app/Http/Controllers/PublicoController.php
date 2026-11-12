@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Actividade;
 use App\Models\ContactoMensagem;
 use App\Models\Documento;
+use App\Models\Evento;
 use App\Models\MembroPublico;
+use App\Models\NewsletterSubscricao;
 use App\Models\Noticia;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,6 +19,13 @@ class PublicoController extends Controller
         return view('publico.inicio', [
             'noticias' => Noticia::where('publicada', true)->orderByDesc('data')->limit(9)->get(),
             'actividades' => Actividade::orderByDesc('data')->limit(4)->get(),
+            'eventos' => Evento::where('activo', true)
+                ->where(fn ($query) => $query->whereNull('data_evento')->orWhereDate('data_evento', '>=', today()))
+                ->orderByRaw('data_evento IS NULL')
+                ->orderBy('data_evento')
+                ->limit(4)
+                ->get(),
+            'tiposDocumento' => Documento::selectRaw('tipo, count(*) as total')->groupBy('tipo')->orderByDesc('total')->get(),
             'totais' => [
                 'membros' => MembroPublico::where('activo', true)->count(),
                 'documentos' => Documento::count(),
@@ -36,6 +45,20 @@ class PublicoController extends Controller
     {
         return view('publico.noticia', [
             'noticia' => Noticia::where('slug', $slug)->where('publicada', true)->firstOrFail(),
+        ]);
+    }
+
+    public function eventos()
+    {
+        return view('publico.eventos', [
+            'eventos' => Evento::where('activo', true)->orderByDesc('data_evento')->orderByDesc('id')->paginate(9),
+        ]);
+    }
+
+    public function evento(string $slug)
+    {
+        return view('publico.evento', [
+            'evento' => Evento::where('slug', $slug)->where('activo', true)->firstOrFail(),
         ]);
     }
 
@@ -101,5 +124,25 @@ class PublicoController extends Controller
         ContactoMensagem::create($dados + ['ip' => $request->ip()]);
 
         return back()->with('estado', 'Mensagem enviada. A CDA respondera em breve.');
+    }
+
+    public function subscreverNewsletter(Request $request): RedirectResponse
+    {
+        $dados = $request->validate([
+            'nome' => ['nullable', 'string', 'max:160'],
+            'email' => ['required', 'email:rfc', 'max:200'],
+        ]);
+
+        NewsletterSubscricao::updateOrCreate(
+            ['email' => mb_strtolower($dados['email'])],
+            [
+                'nome' => $dados['nome'] ?? null,
+                'activo' => true,
+                'origem' => 'portal',
+                'ip' => $request->ip(),
+            ],
+        );
+
+        return back()->with('estado', 'Subscrição confirmada. Passará a receber as novidades da CDA.');
     }
 }

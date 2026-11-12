@@ -2,7 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\MembroPublico;
+use App\Models\Evento;
+use App\Models\NewsletterSubscricao;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -14,7 +15,7 @@ class PortalTest extends TestCase
 
     public function test_paginas_publicas_respondem(): void
     {
-        foreach (['/', '/noticias', '/actividades', '/documentos', '/membros', '/contactos', '/entrar', '/registar', '/instituicao', '/historia', '/orgaos', '/estatutos', '/parceiros'] as $url) {
+        foreach (['/', '/noticias', '/eventos', '/actividades', '/documentos', '/membros', '/contactos', '/entrar', '/registar', '/instituicao', '/historia', '/orgaos', '/estatutos', '/parceiros'] as $url) {
             $this->get($url)->assertOk();
         }
     }
@@ -44,5 +45,53 @@ class PortalTest extends TestCase
 
         $this->post('/entrar', ['identificador' => 'a@b.mz', 'password' => 'segredo123'])->assertSessionHasErrors();
         $this->assertGuest();
+    }
+
+    public function test_visitante_pode_subscrever_newsletter_sem_duplicar_email(): void
+    {
+        $this->post('/newsletter', ['nome' => 'Ana', 'email' => 'ANA@example.com'])
+            ->assertSessionHas('estado');
+        $this->post('/newsletter', ['nome' => 'Ana Maria', 'email' => 'ana@example.com'])
+            ->assertSessionHas('estado');
+
+        $this->assertDatabaseCount('newsletter_subscricoes', 1);
+        $this->assertDatabaseHas('newsletter_subscricoes', [
+            'nome' => 'Ana Maria',
+            'email' => 'ana@example.com',
+            'activo' => true,
+        ]);
+    }
+
+    public function test_admin_cria_evento_e_visitante_ve_pagina_publicada(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+
+        $this->actingAs($admin)->post('/admin/eventos', [
+            'titulo' => 'Conferência Aduaneira',
+            'data_evento' => '2026-12-10',
+            'local' => 'Maputo',
+            'resumo' => 'Encontro anual do sector.',
+            'activo' => '1',
+            'blocos' => [
+                ['tipo' => 'texto', 'conteudo' => 'Programa completo do encontro.'],
+            ],
+        ])->assertRedirect();
+
+        $evento = Evento::firstOrFail();
+        $this->get('/eventos/'.$evento->slug)
+            ->assertOk()
+            ->assertSee('Conferência Aduaneira')
+            ->assertSee('Programa completo do encontro.');
+    }
+
+    public function test_admin_pode_gerir_newsletter(): void
+    {
+        NewsletterSubscricao::create(['email' => 'membro@cda.mz']);
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+
+        $this->actingAs($admin)->get('/admin/newsletter')->assertOk()->assertSee('membro@cda.mz');
+        $this->actingAs($admin)->get('/admin/newsletter/exportar')->assertOk();
     }
 }

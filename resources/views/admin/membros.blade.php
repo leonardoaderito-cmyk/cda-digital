@@ -24,7 +24,7 @@
             </div>
         </div>
     @empty
-        <div class="tabela-linha"><div class="tabela-celula">Ainda nao ha contas registadas.</div></div>
+        <div class="tabela-linha"><div class="tabela-celula">Ainda não há contas registadas.</div></div>
     @endforelse
 </div>
 @endsection

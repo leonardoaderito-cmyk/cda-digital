@@ -44,6 +44,7 @@
                 <li><a href="{{ route('login') }}">Entrar</a></li>
                 <li><a href="{{ route('registo') }}">Criar conta</a></li>
                 <li><a href="{{ route('noticias') }}">Notícias</a></li>
+                <li><a href="{{ route('eventos') }}">Eventos</a></li>
                 <li><a href="{{ route('actividades') }}">Actividades</a></li>
             </ul>
         </div>
@@ -58,6 +59,22 @@
             <p class="mt-3"><a href="tel:+25821305504">+258 21 305 504</a><br><a href="tel:+25821305506">+258 21 305 506</a></p>
             <p class="mt-3 text-zinc-300">Delegações: Nampula (Norte), Beira (Centro) e Maputo (Sul).</p>
             <a href="{{ route('contactos') }}" class="rodape-botao">Enviar mensagem</a>
+        </div>
+    </div>
+    <div class="rodape-newsletter">
+        <div class="max-w-6xl mx-auto px-4 py-5 flex flex-wrap items-center gap-4">
+            <div class="flex-[1_1_18rem]">
+                <strong class="text-white text-lg">Newsletter CDA</strong>
+                <p class="text-zinc-300 text-sm">Receba notícias, eventos, circulares e oportunidades relevantes para o sector aduaneiro.</p>
+            </div>
+            <form method="POST" action="{{ route('newsletter.subscrever') }}" class="flex flex-wrap gap-2 flex-[2_1_28rem]">
+                @csrf
+                <label class="sr-only" for="newsletter-nome-rodape">Nome</label>
+                <input id="newsletter-nome-rodape" name="nome" maxlength="160" placeholder="Nome (opcional)" class="flex-1 min-w-40 rounded px-3 py-2 text-zinc-900 bg-white">
+                <label class="sr-only" for="newsletter-email-rodape">Email</label>
+                <input id="newsletter-email-rodape" type="email" name="email" required maxlength="200" placeholder="O seu email" class="flex-[2_1_14rem] rounded px-3 py-2 text-zinc-900 bg-white">
+                <button class="bg-cda-vermelho text-white font-semibold rounded px-5 py-2 hover:bg-cda-vermelho-escuro">Subscrever</button>
+            </form>
         </div>
     </div>
     <div class="rodape-base">

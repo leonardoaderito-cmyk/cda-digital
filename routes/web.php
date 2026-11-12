@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\EventoController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegistoController;
 use App\Http\Controllers\MembroController;
@@ -15,12 +16,15 @@ Route::controller(PublicoController::class)->group(function () {
     Route::get('/', 'inicio')->name('inicio');
     Route::get('/noticias', 'noticias')->name('noticias');
     Route::get('/noticias/{slug}', 'noticia')->name('noticia');
+    Route::get('/eventos', 'eventos')->name('eventos');
+    Route::get('/eventos/{slug}', 'evento')->name('evento');
     Route::get('/actividades', 'actividades')->name('actividades');
     Route::get('/documentos', 'documentos')->name('documentos');
     Route::get('/documentos/{documento}/abrir', 'documento')->name('documento.abrir');
     Route::get('/membros', 'directorio')->name('directorio');
     Route::get('/contactos', 'contactos')->name('contactos');
     Route::post('/contactos', 'enviarContacto')->middleware('throttle:5,10')->name('contactos.enviar');
+    Route::post('/newsletter', 'subscreverNewsletter')->middleware('throttle:5,10')->name('newsletter.subscrever');
 });
 
 Route::middleware('guest')->group(function () {
@@ -54,4 +58,17 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->controlle
     Route::delete('/noticias/{noticia}', 'apagarNoticia')->name('noticias.apagar');
     Route::get('/mensagens', 'mensagens')->name('mensagens');
     Route::post('/mensagens/{mensagem}/ler', 'lerMensagem')->name('mensagens.ler');
+    Route::get('/newsletter', 'newsletter')->name('newsletter');
+    Route::get('/newsletter/exportar', 'exportarNewsletter')->name('newsletter.exportar');
+    Route::post('/newsletter/{newsletterSubscricao}/alternar', 'alternarNewsletter')->name('newsletter.alternar');
+});
+
+Route::prefix('admin/eventos')->name('admin.eventos')->middleware(['auth', 'admin'])->controller(EventoController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::get('/novo', 'create')->name('.novo');
+    Route::post('/', 'store')->name('.guardar');
+    Route::get('/{evento}/editar', 'edit')->name('.editar');
+    Route::post('/{evento}', 'update')->name('.actualizar');
+    Route::post('/{evento}/alternar', 'alternar')->name('.alternar');
+    Route::delete('/{evento}', 'destroy')->name('.apagar');
 });

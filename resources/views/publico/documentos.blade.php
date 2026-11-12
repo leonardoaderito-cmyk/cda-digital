@@ -3,7 +3,7 @@
 @section('conteudo')
 <h1 class="text-2xl font-semibold mb-4">Centro documental</h1>
 <form method="GET" class="flex flex-wrap gap-3 mb-4">
-    <input name="q" value="{{ request('q') }}" placeholder="Pesquisar titulo" class="flex-1 min-w-48 border border-zinc-300 rounded px-3 py-2">
+    <input name="q" value="{{ request('q') }}" placeholder="Pesquisar título" class="flex-1 min-w-48 border border-zinc-300 rounded px-3 py-2">
     <select name="tipo" class="border border-zinc-300 rounded px-3 py-2">
         <option value="">Todos os tipos</option>
         @foreach ($tipos as $t)<option @selected(request('tipo') === $t)>{{ $t }}</option>@endforeach
@@ -13,7 +13,7 @@
 </form>
 <div class="tabela">
     <div class="tabela-linha tabela-cabecalho">
-        <div class="tabela-celula" style="flex-grow:4">Titulo</div>
+        <div class="tabela-celula" style="flex-grow:4">Título</div>
         <div class="tabela-celula">Tipo</div>
         <div class="tabela-celula tabela-celula-estreita">Ano</div>
         <div class="tabela-celula tabela-celula-estreita"></div>

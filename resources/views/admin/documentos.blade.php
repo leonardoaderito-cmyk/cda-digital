@@ -5,7 +5,7 @@
 <h1 class="text-2xl font-semibold mb-4">Documentos</h1>
 <form method="POST" action="{{ route('admin.documentos.guardar') }}" enctype="multipart/form-data" class="bg-white border border-zinc-200 rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-end">
     @csrf
-    <label class="flex flex-col gap-1 text-sm flex-[2_1_14rem]">Titulo<input name="titulo" required class="border border-zinc-300 rounded px-3 py-2"></label>
+    <label class="flex flex-col gap-1 text-sm flex-[2_1_14rem]">Título<input name="titulo" required class="border border-zinc-300 rounded px-3 py-2"></label>
     <label class="flex flex-col gap-1 text-sm flex-1 min-w-32">Tipo<input name="tipo" class="border border-zinc-300 rounded px-3 py-2"></label>
     <label class="flex flex-col gap-1 text-sm w-24">Ano<input name="ano" class="border border-zinc-300 rounded px-3 py-2"></label>
     <label class="flex flex-col gap-1 text-sm flex-1 min-w-48">PDF<input type="file" name="ficheiro" accept="application/pdf" required></label>
@@ -13,7 +13,7 @@
 </form>
 <div class="tabela">
     <div class="tabela-linha tabela-cabecalho">
-        <div class="tabela-celula" style="flex-grow:4">Titulo</div>
+        <div class="tabela-celula" style="flex-grow:4">Título</div>
         <div class="tabela-celula">Tipo</div>
         <div class="tabela-celula tabela-celula-estreita">Ano</div>
         <div class="tabela-celula tabela-celula-estreita"></div>

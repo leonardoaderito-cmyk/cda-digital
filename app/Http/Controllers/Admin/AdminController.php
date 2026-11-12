@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ContactoMensagem;
 use App\Models\Documento;
+use App\Models\NewsletterSubscricao;
 use App\Models\Noticia;
 use App\Models\Quota;
 use App\Models\Requerimento;
@@ -12,6 +13,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
 {
@@ -182,5 +184,37 @@ class AdminController extends Controller
         $mensagem->update(['lida' => true]);
 
         return back();
+    }
+
+    public function newsletter()
+    {
+        return view('admin.newsletter', [
+            'subscricoes' => NewsletterSubscricao::orderByDesc('activo')->latest()->paginate(50),
+        ]);
+    }
+
+    public function alternarNewsletter(NewsletterSubscricao $newsletterSubscricao): RedirectResponse
+    {
+        $newsletterSubscricao->update(['activo' => ! $newsletterSubscricao->activo]);
+
+        return back()->with('estado', $newsletterSubscricao->activo ? 'Subscrição reactivada.' : 'Subscrição desactivada.');
+    }
+
+    public function exportarNewsletter(): StreamedResponse
+    {
+        return response()->streamDownload(function (): void {
+            $ficheiro = fopen('php://output', 'wb');
+            fwrite($ficheiro, "\xEF\xBB\xBF");
+            fputcsv($ficheiro, ['Nome', 'Email', 'Estado', 'Data']);
+            NewsletterSubscricao::orderBy('email')->each(function (NewsletterSubscricao $subscricao) use ($ficheiro): void {
+                fputcsv($ficheiro, [
+                    $subscricao->nome,
+                    $subscricao->email,
+                    $subscricao->activo ? 'Activo' : 'Inactivo',
+                    $subscricao->created_at?->format('Y-m-d H:i:s'),
+                ]);
+            });
+            fclose($ficheiro);
+        }, 'newsletter-cda-'.now()->format('Y-m-d').'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 }

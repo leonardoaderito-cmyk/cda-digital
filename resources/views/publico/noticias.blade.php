@@ -1,15 +1,24 @@
 @extends('layouts.app')
-@section('titulo', 'Noticias')
+@section('titulo', 'Notícias')
 @section('conteudo')
-<h1 class="text-2xl font-semibold mb-4">Noticias</h1>
-<div class="flex flex-wrap gap-4">
-    @foreach ($noticias as $n)
-        <article class="bg-white border border-zinc-200 rounded-lg p-4 flex-[1_1_20rem] max-w-full">
-            <div class="text-xs text-zinc-500">{{ $n->categoria }} &middot; {{ $n->data?->format('d/m/Y') }}</div>
-            <a href="{{ route('noticia', $n->slug) }}" class="font-semibold hover:underline">{{ $n->titulo }}</a>
-            <p class="text-sm text-zinc-600 mt-1">{{ $n->resumo }}</p>
+@php $meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']; @endphp
+<h1>Notícias</h1>
+<div class="flash flash-largo">
+    @forelse ($noticias as $n)
+        <article class="flash-item">
+            <div class="flash-data" aria-hidden="true">
+                <strong>{{ $n->data?->format('d') ?? '--' }}</strong>
+                <span>{{ $n->data ? $meses[$n->data->month].' '.$n->data->format('y') : 'CDA' }}</span>
+            </div>
+            <div>
+                <a href="{{ route('noticia', $n->slug) }}">{{ $n->titulo }}</a>
+                <small>{{ $n->categoria }}@if ($n->categoria && $n->data) &middot; @endif{{ $n->data?->format('d/m/Y') }}</small>
+                <p class="mt-1 text-cda-cinza">{{ \Illuminate\Support\Str::limit($n->resumo, 160) }}</p>
+            </div>
         </article>
-    @endforeach
+    @empty
+        <p class="py-4 text-cda-cinza">Ainda não há notícias publicadas.</p>
+    @endforelse
 </div>
 <div class="mt-6">{{ $noticias->links() }}</div>
 @endsection

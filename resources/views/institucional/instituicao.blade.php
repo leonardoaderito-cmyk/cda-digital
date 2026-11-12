@@ -41,11 +41,6 @@
     </ul>
     <h2>Órgãos sociais — Triénio 2024–2026</h2>
     <p>Eleitos na XXVI.ª Sessão da Assembleia Geral Ordinária, em Dezembro de 2023, e empossados para o triénio 2024–2026. A composição nominal consta desta página; a descrição das competências de cada órgão está em <a href="/orgaos">Órgãos sociais</a>.</p>
-    <figure>
-      <a href="/documentos" target="_blank" rel="noopener" title="Ver o cartaz em tamanho grande">
-      </a>
-      <figcaption>Cartaz oficial dos Órgãos Sociais para o Triénio 2024–2026 <span>— clique na imagem para ampliar.</span></figcaption>
-    </figure>
     <div>
       <div>
         <h4>Mesa da Assembleia Geral</h4>
