@@ -3,11 +3,12 @@
 @section('conteudo')
 <div class="admin-cabecalho"><h1>Biblioteca de imagens</h1></div>
 
-<form method="POST" action="{{ route('admin.imagens.guardar') }}" enctype="multipart/form-data" class="admin-caixa admin-carregar">
+<form method="POST" action="{{ route('admin.imagens.guardar') }}" enctype="multipart/form-data" class="admin-caixa admin-carregar" data-upload-imagens data-max-ficheiro="5242880" data-max-total="104857600">
     @csrf
     <label for="ficheiros"><strong>Adicionar imagens</strong><small>JPG, PNG, WebP ou GIF, até 5 MB cada. Pode escolher várias de uma vez.</small></label>
     <input id="ficheiros" type="file" name="ficheiros[]" accept="image/jpeg,image/png,image/webp,image/gif" multiple required>
     <button class="admin-botao">Carregar</button>
+    <p class="admin-upload-erro" data-upload-erro role="alert" hidden></p>
 </form>
 
 @if ($imagens->isEmpty())

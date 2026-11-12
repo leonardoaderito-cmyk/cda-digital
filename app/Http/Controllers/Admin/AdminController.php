@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AdminController extends Controller
@@ -183,7 +184,9 @@ class AdminController extends Controller
 
     public function quotas()
     {
-        $quotas = Quota::with('user')->orderByDesc('ano')->orderBy('estado')->get();
+        $quotas = Quota::with('user')
+            ->orderByRaw("CASE WHEN talao_estado = 'em_validacao' THEN 0 ELSE 1 END")
+            ->orderByDesc('ano')->orderBy('estado')->get();
 
         return view('admin.quotas', [
             'quotas' => $quotas,
@@ -191,6 +194,7 @@ class AdminController extends Controller
             'totalPago' => $quotas->where('estado', 'paga')->sum('valor'),
             'totalPendente' => $quotas->whereIn('estado', ['pendente', 'em_atraso'])->sum('valor'),
             'emAtraso' => $quotas->where('estado', 'em_atraso')->count(),
+            'taloesPorValidar' => $quotas->where('talao_estado', 'em_validacao')->count(),
         ]);
     }
 
@@ -269,9 +273,44 @@ class AdminController extends Controller
             'data_pagamento' => $dados['estado'] === 'paga'
                 ? ($dados['data_pagamento'] ?? $quota->data_pagamento ?? now())
                 : null,
+            'talao_estado' => $dados['estado'] === 'paga' && $quota->talao
+                ? 'validado'
+                : $quota->talao_estado,
         ]);
 
         return back()->with('estado', 'Quota actualizada.');
+    }
+
+    /** Confirma ou rejeita o talão enviado pelo membro. */
+    public function validarTalao(Request $request, Quota $quota): RedirectResponse
+    {
+        abort_unless($quota->talao && $quota->talao_estado === 'em_validacao', 404);
+
+        $dados = $request->validate([
+            'accao' => ['required', 'in:validar,rejeitar'],
+            'nota' => ['required_if:accao,rejeitar', 'nullable', 'string', 'max:300'],
+        ]);
+
+        if ($dados['accao'] === 'validar') {
+            $quota->update([
+                'estado' => 'paga',
+                'referencia' => $quota->talao_referencia ?: $quota->referencia,
+                'data_pagamento' => $quota->talao_data ?: now(),
+                'talao_estado' => 'validado',
+                'talao_nota' => null,
+            ]);
+            Auditoria::registar('admin.talao.validado', 'Quota#'.$quota->id.' ('.$quota->ano.')');
+
+            return back()->with('estado', 'Talão validado e quota marcada como paga.');
+        }
+
+        $quota->update([
+            'talao_estado' => 'rejeitado',
+            'talao_nota' => $dados['nota'],
+        ]);
+        Auditoria::registar('admin.talao.rejeitado', 'Quota#'.$quota->id.' ('.$quota->ano.')');
+
+        return back()->with('estado', 'Talão rejeitado. O membro pode consultar a nota e enviar outro.');
     }
 
     public function requerimentos()
@@ -385,6 +424,11 @@ class AdminController extends Controller
             'imagem_biblioteca' => ['nullable', 'integer', 'exists:imagens,id'],
         ]);
 
+        $texto = Noticia::paraHtml($dados['texto']);
+        if (trim(strip_tags($texto, '<img>')) === '') {
+            throw ValidationException::withMessages(['texto' => 'Escreva o texto da notícia.']);
+        }
+
         $imagem = $noticia?->imagem;
         if ($request->hasFile('imagem_ficheiro')) {
             $imagem = Imagem::guardar($request->file('imagem_ficheiro'), $dados['titulo'])->url();
@@ -398,8 +442,8 @@ class AdminController extends Controller
             'titulo' => $dados['titulo'],
             'categoria' => $dados['categoria'] ?? null,
             'data' => $dados['data'],
-            'texto' => $dados['texto'],
-            'resumo' => Str::limit($dados['texto'], 220),
+            'texto' => $texto,
+            'resumo' => Noticia::resumoDe($texto),
             'imagem' => $imagem,
         ];
     }

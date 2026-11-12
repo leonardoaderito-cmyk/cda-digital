@@ -60,7 +60,16 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/sair', [LoginController::class, 'destroy'])->name('logout');
     Route::get('/membro', [MembroController::class, 'area'])->name('membro.area');
+    Route::get('/membro/quotas', [MembroController::class, 'quotas'])->name('membro.quotas');
+    Route::post('/membro/quotas/{quota}/talao', [MembroController::class, 'enviarTalao'])->middleware('throttle:10,10')->name('membro.talao.enviar');
+    Route::get('/membro/quotas/{quota}/talao', [MembroController::class, 'talao'])->name('membro.talao');
+    Route::get('/membro/documentos', [MembroController::class, 'documentos'])->name('membro.documentos');
+    Route::get('/membro/cartao', [MembroController::class, 'cartao'])->name('membro.cartao');
+    Route::get('/membro/requerimentos', [MembroController::class, 'requerimentos'])->name('membro.requerimentos');
     Route::post('/membro/requerimentos', [MembroController::class, 'requerimento'])->name('membro.requerimento');
+    Route::get('/membro/dados', [MembroController::class, 'dados'])->name('membro.dados');
+    Route::post('/membro/dados', [MembroController::class, 'actualizarDados'])->name('membro.dados.actualizar');
+    Route::get('/membro/seguranca', [MembroController::class, 'seguranca'])->name('membro.seguranca');
     Route::post('/membro/senha', [MembroController::class, 'alterarSenha'])->name('membro.senha');
     Route::get('/membro/quotas/{quota}/comprovativo', [MembroController::class, 'comprovativo'])->name('membro.comprovativo');
     Route::get('/membro/quotas/{quota}/comprovativo/descarregar', [MembroController::class, 'descarregarComprovativo'])->name('membro.comprovativo.descarregar');
@@ -83,6 +92,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->controlle
     Route::post('/quotas', 'criarQuota')->middleware('permissao:financeiro.gerir')->name('quotas.criar');
     Route::post('/quotas/lancar', 'lancarQuotas')->middleware('permissao:financeiro.gerir')->name('quotas.lancar');
     Route::post('/quotas/{quota}', 'actualizarQuota')->middleware('permissao:financeiro.gerir')->name('quotas.actualizar');
+    Route::post('/quotas/{quota}/talao', 'validarTalao')->middleware('permissao:financeiro.gerir')->name('quotas.talao');
     Route::get('/requerimentos', 'requerimentos')->middleware('permissao:membros.ver')->name('requerimentos');
     Route::post('/requerimentos/{requerimento}', 'responderRequerimento')->middleware('permissao:requerimentos.gerir')->name('requerimentos.responder');
     Route::get('/documentos', 'documentos')->middleware('permissao:conteudo.gerir')->name('documentos');

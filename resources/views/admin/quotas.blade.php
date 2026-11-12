@@ -17,7 +17,7 @@
     <div class="admin-stat ok"><span>Total recebido</span><strong>{{ $mt($totalPago) }}</strong></div>
     <div class="admin-stat"><span>Por receber</span><strong>{{ $mt($totalPendente) }}</strong></div>
     <div class="admin-stat {{ $emAtraso ? 'destaque' : '' }}"><span>Quotas em atraso</span><strong>{{ $emAtraso }}</strong></div>
-    <div class="admin-stat"><span>Quotas registadas</span><strong>{{ $quotas->count() }}</strong></div>
+    <div class="admin-stat {{ $taloesPorValidar ? 'destaque' : '' }}"><span>Talões por validar</span><strong>{{ $taloesPorValidar }}</strong></div>
 </div>
 
 @if ($gere)
@@ -58,13 +58,23 @@
     <thead><tr><th>Membro</th><th>Ano</th><th>Estado</th><th class="num">Valor</th><th>Pagamento</th>@if ($gere)<th>Actualizar</th>@endif</tr></thead>
     <tbody>
         @foreach ($quotas as $q)
-            <tr>
+            <tr @class(['destaque' => $q->talao_estado === 'em_validacao'])>
                 <td><strong>{{ $q->user->name }}</strong><small>N.º {{ $q->user->carteira ?: '—' }}</small></td>
                 <td>{{ $q->ano }}</td>
                 <td><span class="admin-estado {{ $cores[$q->estado] ?? 'neutro' }}">{{ $estados[$q->estado] ?? $q->estado }}</span></td>
                 <td class="num">{{ $mt($q->valor) }}</td>
                 <td>
-                    @if ($q->estado === 'paga')
+                    @if ($q->talao_estado === 'em_validacao')
+                        <strong>Talão por validar</strong>
+                        <small>Pagamento em {{ $q->talao_data?->format('d/m/Y') ?: '—' }}@if ($q->talao_referencia) &middot; ref. {{ $q->talao_referencia }}@endif</small>
+                        <a href="{{ route('membro.talao', $q) }}" target="_blank" rel="noopener" class="admin-ligacao">Abrir talão</a>
+                        @if ($gere)
+                            <div class="admin-atalhos">
+                                <form method="POST" action="{{ route('admin.quotas.talao', $q) }}" onsubmit="return confirm('Confirmar este pagamento e marcar a quota como paga?')">@csrf<input type="hidden" name="accao" value="validar"><button class="admin-botao admin-botao-s">Validar pagamento</button></form>
+                                <details class="admin-rejeitar"><summary class="admin-ligacao perigo">Rejeitar</summary><form method="POST" action="{{ route('admin.quotas.talao', $q) }}">@csrf<input type="hidden" name="accao" value="rejeitar"><label>Motivo<input name="nota" maxlength="300" required placeholder="Explique o que deve ser corrigido"></label><button class="admin-botao admin-botao-s">Confirmar rejeição</button></form></details>
+                            </div>
+                        @endif
+                    @elseif ($q->estado === 'paga')
                         {{ $q->data_pagamento?->format('d/m/Y') ?: '—' }}<small>{{ $q->referencia ?: 'Sem referência' }}</small>
                         <a href="{{ route('membro.comprovativo', $q) }}" target="_blank" rel="noopener" class="admin-ligacao">Comprovativo</a>
                     @else

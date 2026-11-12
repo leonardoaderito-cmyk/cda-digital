@@ -4,7 +4,7 @@
     {
       "name": "cda-portal",
       "runtimeExecutable": "php",
-      "runtimeArgs": ["artisan", "serve", "--host=127.0.0.1", "--port=8000"],
+      "runtimeArgs": ["-d", "post_max_size=128M", "-d", "upload_max_filesize=5M", "-d", "max_file_uploads=20", "artisan", "serve", "--host=127.0.0.1", "--port=8000"],
       "port": 8000
     }
   ]

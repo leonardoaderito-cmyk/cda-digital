@@ -6,14 +6,14 @@
     <a href="{{ route('admin.noticias') }}" class="admin-ligacao">&larr; Todas as notícias</a>
 </div>
 
-<form method="POST" enctype="multipart/form-data" action="{{ $noticia->exists ? route('admin.noticias.actualizar', $noticia) : route('admin.noticias.guardar') }}" class="admin-editor">
+<form method="POST" enctype="multipart/form-data" action="{{ $noticia->exists ? route('admin.noticias.actualizar', $noticia) : route('admin.noticias.guardar') }}" class="admin-editor" data-editor-form>
     @csrf
     <div class="admin-editor-principal">
         <label class="sr-only" for="titulo">Título</label>
         <input id="titulo" name="titulo" required maxlength="300" value="{{ old('titulo', $noticia->titulo) }}" placeholder="Título da notícia" class="admin-campo-titulo">
-        <label class="admin-rotulo" for="texto">Texto</label>
-        <textarea id="texto" name="texto" rows="18" required class="admin-campo">{{ old('texto', $noticia->texto) }}</textarea>
-        <p class="admin-nota">As quebras de linha são respeitadas na página da notícia. O resumo da lista é criado a partir do início do texto.</p>
+        <div class="admin-rotulo">Texto</div>
+        @include('admin._editor', ['campo' => 'texto', 'html' => \App\Models\Noticia::paraHtml(old('texto', $noticia->texto))])
+        <p class="admin-nota">O resumo da lista de notícias é criado a partir do início do texto.</p>
     </div>
 
     <aside class="admin-editor-lado">
@@ -43,6 +43,7 @@
                 <button type="button" class="admin-botao admin-botao-secundario" data-abrir-biblioteca>Escolher da biblioteca</button>
                 <button type="button" class="admin-ligacao perigo" data-destaque-limpar>Remover imagem</button>
             </div>
+            <p class="admin-nota">Para mais imagens na notícia, use o botão «Imagens» do editor de texto.</p>
         </section>
     </aside>
 </form>

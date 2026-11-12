@@ -17,6 +17,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
@@ -32,12 +33,135 @@ class PortalTest extends TestCase
         }
     }
 
+    public function test_flash_de_noticias_mostra_imagem_data_e_resumo(): void
+    {
+        $noticia = Noticia::create([
+            'titulo' => 'Nova medida aduaneira',
+            'slug' => 'nova-medida-aduaneira',
+            'categoria' => 'Actualidade',
+            'data' => '2026-11-12',
+            'resumo' => 'Informação importante para os despachantes aduaneiros.',
+            'texto' => 'Informação importante para os despachantes aduaneiros.',
+            'imagem' => '/img/media/noticia-teste.jpg',
+            'publicada' => true,
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('flash-cartao', false)
+            ->assertSee($noticia->imagem, false)
+            ->assertSee('12/11/2026')
+            ->assertSee('Informação importante para os despachantes aduaneiros.')
+            ->assertSee('Nov 26');
+    }
+
+    public function test_painel_admin_organiza_noticias_recentes_em_colunas(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+        Noticia::create([
+            'titulo' => 'Notícia alinhada no painel',
+            'slug' => 'noticia-alinhada-no-painel',
+            'categoria' => 'Institucional',
+            'data' => '2026-11-12',
+            'texto' => 'Conteúdo da notícia.',
+            'publicada' => true,
+        ]);
+
+        $this->actingAs($admin)->get('/admin')
+            ->assertOk()
+            ->assertSee('admin-noticias-recentes', false)
+            ->assertSee('Notícia alinhada no painel')
+            ->assertSee('Publicada');
+    }
+
     public function test_area_de_administracao_bloqueia_nao_admin(): void
     {
         $this->get('/admin')->assertRedirect();
 
         $membro = User::factory()->create(['is_admin' => false]);
         $this->actingAs($membro)->get('/admin')->assertForbidden();
+    }
+
+    public function test_biblioteca_aceita_seis_imagens_num_so_envio(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+        $ficheiros = collect(range(1, 6))
+            ->map(fn (int $numero) => UploadedFile::fake()->image("imagem-$numero.jpg", 80, 80))
+            ->all();
+
+        try {
+            $this->actingAs($admin)->post('/admin/imagens', ['ficheiros' => $ficheiros])
+                ->assertRedirect()
+                ->assertSessionHas('estado', '6 imagens adicionadas.');
+            $this->assertDatabaseCount('imagens', 6);
+        } finally {
+            Imagem::all()->each(function (Imagem $imagem): void {
+                $imagem->apagarFicheiro();
+            });
+        }
+    }
+
+    public function test_membro_consulta_novas_paginas_e_envia_talao(): void
+    {
+        Storage::fake('local');
+        $membro = User::factory()->create();
+        $membro->forceFill(['is_admin' => false, 'ativo' => true, 'carteira' => '9001'])->save();
+        $quota = Quota::create([
+            'user_id' => $membro->id,
+            'ano' => now()->year,
+            'valor' => 5000,
+            'estado' => 'pendente',
+        ]);
+
+        foreach (['/membro', '/membro/quotas', '/membro/documentos', '/membro/cartao', '/membro/requerimentos', '/membro/dados', '/membro/seguranca'] as $url) {
+            $this->actingAs($membro)->get($url)->assertOk();
+        }
+
+        $this->actingAs($membro)->post("/membro/quotas/{$quota->id}/talao", [
+            'talao' => UploadedFile::fake()->image('talao.jpg', 120, 120),
+            'talao_data' => now()->toDateString(),
+            'talao_referencia' => 'TRX-9001',
+        ])->assertRedirect()->assertSessionHas('estado');
+
+        $quota->refresh();
+        $this->assertSame('em_validacao', $quota->talao_estado);
+        $this->assertSame('TRX-9001', $quota->talao_referencia);
+        Storage::disk('local')->assertExists($quota->talao);
+    }
+
+    public function test_gestor_financeiro_valida_talao_e_regulariza_quota(): void
+    {
+        Storage::fake('local');
+        $membro = User::factory()->create();
+        $membro->forceFill(['is_admin' => false, 'ativo' => true, 'carteira' => '9002'])->save();
+        $gestor = User::factory()->create();
+        $gestor->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'financeiro'])->save();
+        Storage::disk('local')->put('taloes/teste.jpg', 'imagem');
+        $quota = Quota::create([
+            'user_id' => $membro->id,
+            'ano' => now()->year,
+            'valor' => 5000,
+            'estado' => 'pendente',
+            'talao' => 'taloes/teste.jpg',
+            'talao_estado' => 'em_validacao',
+            'talao_referencia' => 'TRX-9002',
+            'talao_data' => now()->toDateString(),
+            'talao_enviado_em' => now(),
+        ]);
+
+        $this->actingAs($gestor)->post("/admin/quotas/{$quota->id}/talao", ['accao' => 'validar'])
+            ->assertRedirect()
+            ->assertSessionHas('estado');
+
+        $this->assertDatabaseHas('quotas', [
+            'id' => $quota->id,
+            'estado' => 'paga',
+            'referencia' => 'TRX-9002',
+            'talao_estado' => 'validado',
+        ]);
+        $this->assertDatabaseHas('auditoria', ['user_id' => $gestor->id, 'accao' => 'admin.talao.validado']);
     }
 
     public function test_cabecalhos_e_auditoria(): void
@@ -142,13 +266,19 @@ class PortalTest extends TestCase
         $this->actingAs($admin)->post('/admin/paginas/'.$instituicao->id, [
             'titulo' => 'A Câmara',
             'resumo' => 'Resumo novo.',
-            'conteudo' => '<h2>Texto editado</h2><p onclick="alert(1)">Olá</p><script>alert(2)</script><a href="javascript:alert(3)">x</a>',
+            'conteudo' => '<h2 class="texto-centro">Texto editado</h2><p onclick="alert(1)"><span class="texto-cor-vermelha">Olá</span></p><figure class="imagem-editor imagem-direita"><img src="/img/cda-logo.jpg" alt="CDA"><figcaption>Legenda</figcaption></figure><table class="tabela-editor"><tbody><tr><td>Valor</td></tr></tbody></table><figure class="video-incorporado"><a href="https://www.youtube.com/watch?v=abcdefghijk">Vídeo institucional</a></figure><script>alert(2)</script><a href="javascript:alert(3)">x</a>',
             'activa' => '1',
         ])->assertRedirect();
 
         $this->get('/instituicao')->assertOk()
             ->assertSee('A Câmara')->assertSee('Texto editado')
+            ->assertSee('texto-centro', false)->assertSee('texto-cor-vermelha', false)
+            ->assertSee('imagem-direita', false)->assertSee('tabela-editor', false)
+            ->assertSee('video-incorporado', false)
             ->assertDontSee('alert(', false)->assertDontSee('onclick', false);
+
+        $this->actingAs($admin)->get('/admin/paginas/'.$instituicao->id.'/editar')
+            ->assertOk()->assertSee('data-alinhar="centro"', false)->assertSee('data-video', false)->assertSee('data-tabela="inserir"', false);
 
         $this->actingAs($admin)->post('/admin/paginas', ['titulo' => 'Código de Ética', 'conteudo' => '<p>Deveres do despachante.</p>', 'activa' => '1', 'no_menu' => '1'])->assertRedirect();
         $this->get('/pagina/codigo-de-etica')->assertOk()->assertSee('Deveres do despachante.');
@@ -175,6 +305,34 @@ class PortalTest extends TestCase
 
         $this->actingAs($admin)->delete('/admin/imagens/'.$imagem->id)->assertRedirect();
         $this->assertFileDoesNotExist($pasta.'/'.basename($imagem->ficheiro));
+    }
+
+    public function test_noticia_usa_o_editor_rico_com_varias_imagens(): void
+    {
+        $admin = $this->admin();
+
+        // O editor carrega varias imagens de uma vez e recebe-as em JSON
+        $resposta = $this->actingAs($admin)->postJson('/admin/imagens', ['ficheiros' => [
+            UploadedFile::fake()->image('foto-1.jpg', 400, 300),
+            UploadedFile::fake()->image('foto-2.jpg', 400, 300),
+        ]])->assertOk()->assertJsonCount(2, 'imagens');
+        [$a, $b] = array_column($resposta->json('imagens'), 'url');
+
+        $html = '<p>Abertura do <strong>ano aduaneiro</strong>.</p><div class="galeria-editor"><figure class="imagem-editor"><img src="'.$a.'" alt=""></figure><figure class="imagem-editor"><img src="'.$b.'" alt=""></figure></div><script>alert(1)</script>';
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Ano aduaneiro', 'texto' => $html, 'data' => '2026-04-01'])->assertRedirect();
+
+        $noticia = Noticia::where('slug', 'ano-aduaneiro')->firstOrFail();
+        $this->assertSame('Abertura do ano aduaneiro.', $noticia->resumo);
+        $this->assertStringNotContainsString('<script', $noticia->texto);
+        $this->actingAs($admin)->get('/admin/noticias/'.$noticia->id.'/editar')->assertOk()->assertSee('data-editor', false)->assertSee('galeria-editor', false);
+        $this->get('/noticias/ano-aduaneiro')->assertSee('<strong>ano aduaneiro</strong>', false)->assertSee($a, false)->assertSee($b, false);
+
+        // As noticias antigas, em texto simples, continuam com os paragrafos
+        $antiga = Noticia::create(['titulo' => 'Antiga', 'slug' => 'antiga', 'data' => '2025-01-01', 'texto' => "Direitos & deveres.\n\nSegundo.", 'publicada' => true]);
+        $this->get('/noticias/antiga')->assertSee('<p>Direitos &amp; deveres.</p>', false)->assertSee('<p>Segundo.</p>', false);
+
+        // Sem texto nao se guarda
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Vazia', 'texto' => '<p><br></p>', 'data' => '2026-04-01'])->assertSessionHasErrors('texto');
     }
 
     public function test_admin_configura_o_carrossel(): void
@@ -369,15 +527,15 @@ class PortalTest extends TestCase
         ]);
 
         $this->actingAs($membro)->get('/membro/declaracao-quitacao')
-            ->assertOk()->assertSee('Declaração de quitação')->assertSee('data:image/png;base64,', false);
+            ->assertOk()->assertSee('Certificado de Quitação')->assertSee('CDA-CQ-'.now()->year)->assertSee('data:image/png;base64,', false);
         $pdf = $this->actingAs($membro)->get('/membro/declaracao-quitacao/descarregar');
         $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $pdf->getContent());
         $this->actingAs($membro)->get('/membro/quotas/'.$quota->id.'/comprovativo/descarregar')
             ->assertOk()->assertHeader('Content-Type', 'application/pdf');
 
-        $url = URL::signedRoute('regularidade.verificar', ['user' => $membro->id]);
-        $this->get($url)->assertOk()->assertSee('Situação regularizada');
+        $url = URL::signedRoute('regularidade.verificar', ['user' => $membro->id, 'ano' => now()->year]);
+        $this->get($url)->assertOk()->assertSee('Certificado válido')->assertSee('CDA-CQ-'.now()->year);
 
         $quota->update(['estado' => 'em_atraso', 'data_pagamento' => null]);
         $this->get($url)->assertOk()->assertSee('Situação não regularizada');

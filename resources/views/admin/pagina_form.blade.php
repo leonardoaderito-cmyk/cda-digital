@@ -23,31 +23,7 @@
             <textarea id="resumo" name="resumo" rows="2" maxlength="500" class="admin-campo">{{ old('resumo', $pagina->resumo) }}</textarea>
 
             <div class="admin-rotulo">Conteúdo</div>
-            <div class="editor" data-editor>
-                <div class="editor-barra" role="toolbar" aria-label="Formatação">
-                    <button type="button" data-cmd="formatBlock" data-valor="p" title="Parágrafo">¶</button>
-                    <button type="button" data-cmd="formatBlock" data-valor="h2" title="Título">T1</button>
-                    <button type="button" data-cmd="formatBlock" data-valor="h3" title="Subtítulo">T2</button>
-                    <span class="editor-sep"></span>
-                    <button type="button" data-cmd="bold" title="Negrito"><b>N</b></button>
-                    <button type="button" data-cmd="italic" title="Itálico"><i>I</i></button>
-                    <button type="button" data-cmd="underline" title="Sublinhado"><u>S</u></button>
-                    <span class="editor-sep"></span>
-                    <button type="button" data-cmd="insertUnorderedList" title="Lista">&bull; Lista</button>
-                    <button type="button" data-cmd="insertOrderedList" title="Lista numerada">1. Lista</button>
-                    <button type="button" data-cmd="formatBlock" data-valor="blockquote" title="Citação">&ldquo; Citação</button>
-                    <span class="editor-sep"></span>
-                    <button type="button" data-ligacao title="Inserir ligação">Ligação</button>
-                    <button type="button" data-cmd="unlink" title="Remover ligação">Sem ligação</button>
-                    <button type="button" data-abrir-biblioteca title="Inserir imagem da biblioteca">Imagem</button>
-                    <span class="editor-sep"></span>
-                    <button type="button" data-cmd="undo" title="Anular">&#8630;</button>
-                    <button type="button" data-cmd="redo" title="Refazer">&#8631;</button>
-                    <button type="button" data-html title="Ver e editar o código HTML" class="editor-fim">HTML</button>
-                </div>
-                <div class="editor-area conteudo-texto" contenteditable="true" data-editor-area>{!! \App\Models\Pagina::limparHtml(old('conteudo', $pagina->conteudo)) !!}</div>
-                <textarea name="conteudo" class="editor-codigo" data-editor-codigo hidden spellcheck="false" aria-label="Código HTML"></textarea>
-            </div>
+            @include('admin._editor', ['campo' => 'conteudo', 'html' => \App\Models\Pagina::limparHtml(old('conteudo', $pagina->conteudo))])
         @endif
     </div>
 

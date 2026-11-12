@@ -36,7 +36,7 @@
     <div class="cabecalho">
         <div class="max-w-6xl mx-auto px-4 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <a href="{{ route('inicio') }}" class="flex items-center gap-2.5">
-                <img src="{{ asset('img/cda-logo.jpg') }}" alt="Logotipo da CDA" class="h-14 w-14 object-contain">
+                <img src="{{ asset('img/cda-logo.jpg') }}" alt="Logotipo da CDA" class="h-12 w-12 object-contain">
                 <span class="cabecalho-nome">Câmara dos Despachantes<br>Aduaneiros de Moçambique
                     <span class="cabecalho-lema">&ldquo;Por uma câmara coesa, interventiva e próspera&rdquo;</span>
                 </span>

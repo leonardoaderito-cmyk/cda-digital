@@ -21,4 +21,4 @@ if not exist public\build (
 )
 
 start "" http://localhost:8002/entrar
-php artisan serve --host=127.0.0.1 --port=8002
+php -d post_max_size=128M -d upload_max_filesize=5M -d max_file_uploads=20 artisan serve --host=127.0.0.1 --port=8002

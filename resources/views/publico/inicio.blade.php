@@ -51,20 +51,28 @@
                 <h2>Flash de Notícias</h2>
                 <a href="{{ route('noticias') }}">Ver todas</a>
             </div>
-            <div class="flash">
+            <div class="flash-cartoes">
                 @forelse ($noticias as $n)
-                    <article class="flash-item">
-                        @if ($n->imagem)
-                            <img src="{{ $imagemDe($n->imagem) }}" alt="" class="flash-miniatura" loading="lazy">
-                        @else
-                            <div class="flash-data" aria-hidden="true">
+                    <article class="flash-cartao">
+                        <a href="{{ route('noticia', $n->slug) }}" class="flash-media" aria-label="Ler: {{ $n->titulo }}">
+                            @if ($n->imagem)
+                                <img src="{{ $imagemDe($n->imagem) }}" alt="" loading="lazy">
+                            @else
+                                <span class="flash-sem-imagem" aria-hidden="true"><strong>CDA</strong><small>Notícia</small></span>
+                            @endif
+                            <time class="flash-data" datetime="{{ $n->data?->toDateString() }}">
                                 <strong>{{ $n->data?->format('d') ?? '--' }}</strong>
                                 <span>{{ $n->data ? $meses[$n->data->month].' '.$n->data->format('y') : 'CDA' }}</span>
+                            </time>
+                        </a>
+                        <div class="flash-conteudo">
+                            <div class="flash-meta">
+                                <span>{{ $n->categoria ?: 'Actualidade' }}</span>
+                                @if ($n->data)<time datetime="{{ $n->data->toDateString() }}">{{ $n->data->format('d/m/Y') }}</time>@endif
                             </div>
-                        @endif
-                        <div>
-                            <a href="{{ route('noticia', $n->slug) }}">{{ $n->titulo }}</a>
-                            <small>{{ $n->categoria }}@if ($n->categoria && $n->data) &middot; @endif{{ $n->data?->format('d/m/Y') }}</small>
+                            <h3><a href="{{ route('noticia', $n->slug) }}">{{ $n->titulo }}</a></h3>
+                            @if ($n->resumo)<p>{{ \Illuminate\Support\Str::limit($n->resumo, 125) }}</p>@endif
+                            <a href="{{ route('noticia', $n->slug) }}" class="flash-ler" aria-label="Ler a notícia {{ $n->titulo }}">Ler notícia <span aria-hidden="true">&rarr;</span></a>
                         </div>
                     </article>
                 @empty

@@ -1,70 +1,92 @@
-@extends('layouts.app')
-@section('titulo', 'Área de membro')
+@extends('layouts.membro')
+@section('titulo', 'Resumo')
 @section('conteudo')
-<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
-    <div><p class="text-sm text-zinc-500">Área do membro</p><h1 class="text-2xl font-medium">{{ $membro->name }}</h1><p class="text-sm text-zinc-600 mt-1">N.º de membro {{ $membro->carteira ?? '—' }} · {{ $membro->email }} @if ($registo) · {{ $registo->empresa }} @endif</p></div>
-    <form method="POST" action="{{ route('logout') }}">@csrf<button class="border border-zinc-300 rounded px-4 py-2 text-sm">Terminar sessão</button></form>
+@php $mt = fn ($v) => number_format($v, 0, ',', '.').' MT'; @endphp
+<div class="admin-cabecalho">
+    <div><h1>Olá, {{ \Illuminate\Support\Str::before($membro->name, ' ') }}</h1><p>N.º de membro {{ $membro->carteira ?? '—' }}@if ($registo?->empresa) &middot; {{ $registo->empresa }}@endif @if ($membro->ultimo_login) &middot; última entrada em {{ $membro->ultimo_login->format('d/m/Y H:i') }}@endif</p></div>
 </div>
 
-<div class="grid md:grid-cols-3 gap-3 mb-8">
-    <div class="bg-white border border-zinc-200 rounded-lg p-5"><span class="text-sm text-zinc-500">Situação financeira</span><strong class="block text-xl font-medium mt-1 {{ $situacao === 'Regularizada' ? 'text-emerald-700' : 'text-amber-700' }}">{{ $situacao }}</strong></div>
-    <div class="bg-white border border-zinc-200 rounded-lg p-5"><span class="text-sm text-zinc-500">Total pago</span><strong class="block text-xl font-medium mt-1">{{ number_format($totalPago, 0, ',', '.') }} MT</strong></div>
-    <div class="bg-white border border-zinc-200 rounded-lg p-5"><span class="text-sm text-zinc-500">Valor pendente</span><strong class="block text-xl font-medium mt-1">{{ number_format($totalPendente, 0, ',', '.') }} MT</strong></div>
+<div class="admin-stats">
+    <div class="admin-stat {{ $regular ? 'ok' : 'destaque' }}"><span>Situação financeira</span><strong>{{ $situacao }}</strong></div>
+    <div class="admin-stat"><span>Quota de {{ now()->year }}</span><strong>{{ $quotaDoAno ? $mt($quotaDoAno->valor) : '—' }}</strong><small>@if ($quotaDoAno) @include('membro._estado', ['q' => $quotaDoAno]) @else Ainda não lançada @endif</small></div>
+    <div class="admin-stat {{ $totalPendente ? 'destaque' : '' }}"><span>Por pagar</span><strong>{{ $mt($totalPendente) }}</strong></div>
+    <div class="admin-stat"><span>Total pago</span><strong>{{ $mt($totalPago) }}</strong></div>
 </div>
 
 @if ($regular)
-<section class="bg-emerald-50 border border-emerald-200 rounded-lg p-5 mb-8 flex flex-wrap items-center justify-between gap-4">
-    <div><h2 class="font-medium text-emerald-900">Quotas em dia</h2><p class="text-sm text-emerald-800 mt-1">A sua declaração de quitação está disponível e pode ser confirmada através do QR.</p></div>
-    <div class="flex flex-wrap gap-2">
-        <a href="{{ route('membro.declaracao') }}" target="_blank" class="border border-emerald-700 text-emerald-900 rounded px-4 py-2 text-sm">Visualizar</a>
-        <a href="{{ route('membro.declaracao.descarregar') }}" class="bg-emerald-800 text-white rounded px-4 py-2 text-sm">Descarregar declaração PDF</a>
-    </div>
-</section>
+    <section class="admin-caixa membro-destaque ok">
+        <h2>Quotas em dia</h2>
+        <p>O seu certificado de quitação de {{ now()->year }} está disponível, pronto para imprimir e pode ser confirmado por terceiros através do código QR.</p>
+        <div class="admin-atalhos">
+            <a href="{{ route('membro.declaracao.descarregar') }}" class="admin-botao">Emitir certificado (PDF)</a>
+            <a href="{{ route('membro.declaracao') }}" target="_blank" rel="noopener" class="admin-botao admin-botao-secundario">Pré-visualizar</a>
+            @if ($membro->carteira && ! $membro->is_admin)<a href="{{ route('membro.cartao') }}" class="admin-botao admin-botao-secundario">Cartão de membro</a>@endif
+        </div>
+    </section>
+@elseif ($emValidacao)
+    <section class="admin-caixa membro-destaque">
+        <h2>Pagamento em validação</h2>
+        <p>Recebemos {{ $emValidacao === 1 ? 'o seu talão' : 'os seus '.$emValidacao.' talões' }}. A situação fica regularizada assim que a secretaria confirmar o pagamento.</p>
+        <div class="admin-atalhos"><a href="{{ route('membro.quotas') }}" class="admin-botao admin-botao-secundario">Ver quotas</a></div>
+    </section>
+@elseif ($totalPendente || $quotas->whereIn('estado', ['pendente', 'em_atraso'])->isNotEmpty())
+    <section class="admin-caixa membro-destaque alerta">
+        <h2>Tem quotas por regularizar</h2>
+        <p>Pague a quota e envie o talão para a secretaria validar. Com as quotas em dia pode emitir o certificado de quitação e o cartão de membro.</p>
+        <div class="admin-atalhos"><a href="{{ route('membro.quotas') }}" class="admin-botao">Pagar e enviar talão</a></div>
+    </section>
 @endif
 
-<h2 class="text-lg font-medium mb-2">Quotas e pagamentos</h2>
-<div class="tabela mb-8">
-    <div class="tabela-linha tabela-cabecalho"><div class="tabela-celula tabela-celula-estreita">Ano</div><div class="tabela-celula">Estado</div><div class="tabela-celula">Valor</div><div class="tabela-celula">Pagamento</div><div class="tabela-celula">Comprovativo</div></div>
-    @forelse ($quotas as $q)
-        @php $rotulos = ['pendente'=>'Pendente','paga'=>'Paga','em_atraso'=>'Em atraso','isenta'=>'Isenta']; @endphp
-        <div class="tabela-linha">
-            <div class="tabela-celula tabela-celula-estreita"><strong class="font-medium">{{ $q->ano }}</strong></div>
-            <div class="tabela-celula"><span class="{{ $q->estado === 'paga' || $q->estado === 'isenta' ? 'text-emerald-700' : 'text-amber-700' }}">{{ $rotulos[$q->estado] ?? $q->estado }}</span></div>
-            <div class="tabela-celula">{{ number_format($q->valor, 0, ',', '.') }} MT</div>
-            <div class="tabela-celula">{{ $q->data_pagamento?->format('d/m/Y') ?: '—' }}<small class="block text-zinc-500">{{ $q->referencia ?: 'Sem referência' }}</small></div>
-            <div class="tabela-celula">@if($q->estado === 'paga')<a href="{{ route('membro.comprovativo', $q) }}" target="_blank" class="text-blue-800 hover:underline">Ver</a> · <a href="{{ route('membro.comprovativo.descarregar', $q) }}" class="text-blue-800 hover:underline">PDF</a>@else<span class="text-zinc-400">Disponível após pagamento</span>@endif</div>
-        </div>
-    @empty
-        <div class="tabela-linha"><div class="tabela-celula">Ainda não existem quotas registadas na sua conta.</div></div>
-    @endforelse
-</div>
-
-<div class="grid lg:grid-cols-2 gap-6">
-    <section>
-        <h2 class="text-lg font-medium mb-2">Requerimentos</h2>
-        <div class="tabela mb-4">
-            @forelse ($requerimentos as $r)
-                <div class="tabela-linha"><div class="tabela-celula"><strong>{{ $r->tipo }}</strong><small class="block text-zinc-500">{{ $r->created_at->format('d/m/Y') }} · {{ str_replace('_', ' ', $r->estado) }}</small><p class="mt-2">{{ $r->descricao }}</p>@if($r->resposta)<p class="mt-2 border-l-2 border-blue-900 pl-3"><strong>Resposta da CDA:</strong> {{ $r->resposta }}</p>@endif</div></div>
-            @empty
-                <div class="tabela-linha"><div class="tabela-celula">Sem requerimentos.</div></div>
-            @endforelse
-        </div>
-        <form method="POST" action="{{ route('membro.requerimento') }}" class="bg-white border border-zinc-200 rounded-lg p-5 flex flex-col gap-3">@csrf
-            <label class="flex flex-col gap-1 text-sm">Tipo<input name="tipo" required class="border border-zinc-300 rounded px-3 py-2"></label>
-            <label class="flex flex-col gap-1 text-sm">Descrição<textarea name="descricao" rows="3" class="border border-zinc-300 rounded px-3 py-2"></textarea></label>
-            <button class="self-start bg-blue-950 text-white rounded px-4 py-2">Submeter requerimento</button>
-        </form>
+<div class="admin-grelha">
+    <section class="admin-caixa">
+        <h2>Últimas quotas</h2>
+        @if ($quotas->isEmpty())
+            <p>Ainda não existem quotas registadas na sua conta.</p>
+        @else
+            <ul class="admin-recentes">
+                @foreach ($quotas->take(4) as $q)
+                    <li><span>{{ $q->ano }}</span><strong>{{ $mt($q->valor) }}</strong> @include('membro._estado', ['q' => $q])</li>
+                @endforeach
+            </ul>
+            <div class="admin-atalhos"><a href="{{ route('membro.quotas') }}" class="admin-ligacao">Ver todas as quotas &rarr;</a></div>
+        @endif
     </section>
 
-    <section>
-        <h2 class="text-lg font-medium mb-2">Segurança da conta</h2>
-        <form method="POST" action="{{ route('membro.senha') }}" class="bg-white border border-zinc-200 rounded-lg p-5 flex flex-col gap-3">@csrf
-            <p class="text-sm text-zinc-600">Pode alterar a sua senha a qualquer momento. Use pelo menos 8 caracteres.</p>
-            <label class="flex flex-col gap-1 text-sm">Senha actual<input type="password" name="password_actual" required autocomplete="current-password" class="border border-zinc-300 rounded px-3 py-2"></label>
-            <label class="flex flex-col gap-1 text-sm">Nova senha<input type="password" name="password" required autocomplete="new-password" class="border border-zinc-300 rounded px-3 py-2"></label>
-            <label class="flex flex-col gap-1 text-sm">Confirmar nova senha<input type="password" name="password_confirmation" required autocomplete="new-password" class="border border-zinc-300 rounded px-3 py-2"></label>
-            <button class="self-start bg-blue-950 text-white rounded px-4 py-2">Alterar senha</button>
-        </form>
+    <section class="admin-caixa">
+        <h2>Requerimentos</h2>
+        @if ($requerimentos->isEmpty())
+            <p>Não tem requerimentos. Pode pedir declarações, segundas vias e outros serviços à CDA.</p>
+        @else
+            <ul class="admin-recentes">
+                @foreach ($requerimentos as $r)
+                    <li><span>{{ $r->created_at->format('d/m/Y') }}</span>{{ $r->tipo }} <span class="admin-estado {{ ['em_analise' => 'aviso', 'aprovado' => 'ligado', 'rejeitado' => 'alerta'][$r->estado] ?? 'neutro' }}" style="min-width:0;color:#fff;margin:0">{{ ['em_analise' => 'Em análise', 'aprovado' => 'Aprovado', 'rejeitado' => 'Rejeitado'][$r->estado] ?? $r->estado }}</span></li>
+                @endforeach
+            </ul>
+        @endif
+        <div class="admin-atalhos"><a href="{{ route('membro.requerimentos') }}" class="admin-ligacao">{{ $requerimentos->isEmpty() ? 'Fazer um requerimento' : 'Ver todos e fazer novo' }} &rarr;</a></div>
     </section>
+
+    @if ($comunicados->isNotEmpty())
+    <section class="admin-caixa">
+        <h2>Circulares e comunicados recentes</h2>
+        <ul class="admin-recentes">
+            @foreach ($comunicados as $d)
+                <li><span>{{ $d->tipo }} {{ $d->ano }}</span><a href="{{ route('documento.abrir', $d) }}" target="_blank" rel="noopener">{{ \Illuminate\Support\Str::limit($d->titulo, 90) }}</a></li>
+            @endforeach
+        </ul>
+        <div class="admin-atalhos"><a href="{{ route('documentos') }}" class="admin-ligacao">Centro documental &rarr;</a></div>
+    </section>
+    @endif
+
+    @if ($eventos->isNotEmpty())
+    <section class="admin-caixa">
+        <h2>Próximos eventos</h2>
+        <ul class="admin-recentes">
+            @foreach ($eventos as $e)
+                <li><span>{{ $e->data_evento?->format('d/m/Y') }}</span><a href="{{ route('evento', $e->slug) }}">{{ $e->titulo }}</a>@if ($e->local) <small>&middot; {{ $e->local }}</small>@endif</li>
+            @endforeach
+        </ul>
+    </section>
+    @endif
 </div>
 @endsection

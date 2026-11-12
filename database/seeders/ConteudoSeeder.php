@@ -6,6 +6,7 @@ use App\Models\Actividade;
 use App\Models\Documento;
 use App\Models\Noticia;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 class ConteudoSeeder extends Seeder
@@ -35,13 +36,24 @@ class ConteudoSeeder extends Seeder
         }
 
         foreach ($dados['noticias'] as $n) {
-            Noticia::updateOrCreate(['slug' => Str::slug($n['titulo'])], [
+            $noticia = Noticia::updateOrCreate(['slug' => Str::slug($n['titulo'])], [
                 'titulo' => $n['titulo'],
                 'categoria' => $n['categoria'] ?? null,
                 'data' => $n['data'] ?? null,
                 'resumo' => Str::limit($n['texto'] ?? '', 220),
                 'texto' => $n['texto'] ?? null,
             ]);
+
+            // Recupera a fotografia original do portal legado sem substituir uma imagem escolhida depois no administrador.
+            if (! $noticia->imagem && ! empty($n['imagem'])) {
+                $origem = base_path('legado/docs/'.$n['imagem']);
+                $destino = public_path($n['imagem']);
+                if (File::exists($origem)) {
+                    File::ensureDirectoryExists(dirname($destino));
+                    File::copy($origem, $destino);
+                    $noticia->update(['imagem' => '/'.$n['imagem']]);
+                }
+            }
         }
     }
 }

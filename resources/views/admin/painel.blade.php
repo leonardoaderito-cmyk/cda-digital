@@ -47,15 +47,26 @@
         </div>
     </section>
 
-    <section class="admin-caixa">
+    <section class="admin-caixa admin-caixa-larga">
         <h2>Notícias recentes</h2>
-        <ul class="admin-recentes">
+        <ul class="admin-noticias-recentes">
             @forelse ($ultimasNoticias as $n)
-                <li><span>{{ $n->data?->format('d/m/Y') }}</span><a href="{{ route('admin.noticias.editar', $n) }}">{{ $n->titulo }}</a>@unless ($n->publicada) <small>— oculta</small>@endunless</li>
+                <li>
+                    <div class="admin-noticia-miniatura">
+                        @if ($n->imagem)<img src="{{ $n->imagem }}" alt="" loading="lazy">@else<span aria-hidden="true">CDA</span>@endif
+                    </div>
+                    <time datetime="{{ $n->data?->toDateString() }}">{{ $n->data?->format('d/m/Y') ?: 'Sem data' }}</time>
+                    <div class="admin-noticia-info">
+                        <a href="{{ route('admin.noticias.editar', $n) }}">{{ $n->titulo }}</a>
+                        <small>{{ $n->categoria ?: 'Sem categoria' }}</small>
+                    </div>
+                    <span class="admin-estado {{ $n->publicada ? 'ligado' : 'neutro' }}">{{ $n->publicada ? 'Publicada' : 'Oculta' }}</span>
+                </li>
             @empty
-                <li>Ainda não há notícias.</li>
+                <li class="admin-noticia-vazia">Ainda não há notícias.</li>
             @endforelse
         </ul>
+        <div class="admin-atalhos"><a href="{{ route('admin.noticias') }}" class="admin-ligacao">Ver todas as notícias &rarr;</a></div>
     </section>
     @endif
 
