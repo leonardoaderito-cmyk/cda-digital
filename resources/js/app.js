@@ -59,25 +59,47 @@ if (revelar.length) {
 // Mega menu: abre com clique/teclado (e com hover via CSS no ecra grande)
 const megaLista = document.getElementById('mega-lista');
 const megaToggle = document.querySelector('[data-mega-toggle]');
+const megaItens = document.querySelectorAll('[data-mega-item]');
+const megaBotao = (item) => item.querySelector('.mega-botao');
+const megaFechar = (excepto = null) => megaItens.forEach((i) => {
+    if (i === excepto) return;
+    i.classList.remove('aberto');
+    megaBotao(i).setAttribute('aria-expanded', 'false');
+});
 megaToggle?.addEventListener('click', () => {
     const aberto = megaLista.classList.toggle('aberto');
     megaToggle.setAttribute('aria-expanded', aberto);
+    if (!aberto) megaFechar();
 });
-document.querySelectorAll('[data-mega-item]').forEach((item) => {
-    const botao = item.querySelector('.mega-botao');
+megaItens.forEach((item) => {
+    const botao = megaBotao(item);
     botao.addEventListener('click', () => {
         const abrir = !item.classList.contains('aberto');
-        document.querySelectorAll('[data-mega-item]').forEach((i) => {
-            i.classList.remove('aberto');
-            i.querySelector('.mega-botao').setAttribute('aria-expanded', 'false');
-        });
+        megaFechar();
         item.classList.toggle('aberto', abrir);
         botao.setAttribute('aria-expanded', abrir);
     });
+    // Ao passar o rato por outro item, fecha o painel que tinha sido aberto com clique
+    item.addEventListener('mouseenter', () => megaFechar(item));
+    // Seta para baixo entra no painel; o foco a sair do item fecha-o
+    botao.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowDown') return;
+        e.preventDefault();
+        megaFechar();
+        item.classList.add('aberto');
+        botao.setAttribute('aria-expanded', 'true');
+        item.querySelector('.mega-painel a, .mega-painel input')?.focus();
+    });
+    item.addEventListener('focusout', (e) => {
+        if (!item.contains(e.relatedTarget) && e.relatedTarget) megaFechar();
+    });
 });
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') document.querySelectorAll('[data-mega-item].aberto').forEach((i) => i.classList.remove('aberto'));
+    if (e.key !== 'Escape') return;
+    const aberto = document.querySelector('[data-mega-item].aberto');
+    if (aberto && aberto.contains(document.activeElement)) megaBotao(aberto).focus();
+    megaFechar();
 });
 document.addEventListener('click', (e) => {
-    if (!e.target.closest('[data-mega-item]')) document.querySelectorAll('[data-mega-item].aberto').forEach((i) => i.classList.remove('aberto'));
+    if (!e.target.closest('[data-mega-item]')) megaFechar();
 });
