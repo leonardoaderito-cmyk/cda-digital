@@ -81,6 +81,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->controlle
     Route::post('/membros/{user}/credenciais', 'enviarCredenciais')->middleware('permissao:membros.gerir')->name('membros.credenciais');
     Route::get('/quotas', 'quotas')->middleware('permissao:financeiro.ver')->name('quotas');
     Route::post('/quotas', 'criarQuota')->middleware('permissao:financeiro.gerir')->name('quotas.criar');
+    Route::post('/quotas/lancar', 'lancarQuotas')->middleware('permissao:financeiro.gerir')->name('quotas.lancar');
     Route::post('/quotas/{quota}', 'actualizarQuota')->middleware('permissao:financeiro.gerir')->name('quotas.actualizar');
     Route::get('/requerimentos', 'requerimentos')->middleware('permissao:membros.ver')->name('requerimentos');
     Route::post('/requerimentos/{requerimento}', 'responderRequerimento')->middleware('permissao:requerimentos.gerir')->name('requerimentos.responder');

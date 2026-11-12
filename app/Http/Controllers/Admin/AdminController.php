@@ -19,6 +19,7 @@ use App\Notifications\AcessoAdministrativo;
 use App\Notifications\CredenciaisIniciais;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -143,7 +144,7 @@ class AdminController extends Controller
             'entidade' => $registo->empresa,
         ]);
         $user->forceFill(['ativo' => true, 'aprovado_em' => now()])->save();
-        Quota::firstOrCreate(['user_id' => $user->id, 'ano' => now()->year]);
+        Quota::firstOrCreate(['user_id' => $user->id, 'ano' => now()->year], ['valor' => Quota::valorDoAno(now()->year)]);
         $this->notificarCredenciais($user);
 
         return back()->with('estado', 'Conta criada e ligação para definir a senha enviada para '.$user->email.'.');
@@ -152,7 +153,7 @@ class AdminController extends Controller
     public function aprovar(User $user): RedirectResponse
     {
         $user->forceFill(['ativo' => true, 'aprovado_em' => now()])->save();
-        Quota::firstOrCreate(['user_id' => $user->id, 'ano' => now()->year]);
+        Quota::firstOrCreate(['user_id' => $user->id, 'ano' => now()->year], ['valor' => Quota::valorDoAno(now()->year)]);
 
         return back()->with('estado', 'Conta aprovada.');
     }
@@ -191,6 +192,41 @@ class AdminController extends Controller
             'totalPendente' => $quotas->whereIn('estado', ['pendente', 'em_atraso'])->sum('valor'),
             'emAtraso' => $quotas->where('estado', 'em_atraso')->count(),
         ]);
+    }
+
+    /** Lanca a quota de um ano para todos os membros activos e acerta as que ainda estavam sem valor. */
+    public function lancarQuotas(Request $request): RedirectResponse
+    {
+        $dados = $request->validate([
+            'ano' => ['required', 'integer', 'between:2000,2100'],
+            'valor' => ['required', 'integer', 'min:1'],
+        ]);
+        $ano = (int) $dados['ano'];
+        $valor = (int) $dados['valor'];
+
+        [$criadas, $acertadas, $atrasadas] = DB::transaction(function () use ($ano, $valor, $request) {
+            $comQuota = Quota::where('ano', $ano)->pluck('user_id');
+            $semQuota = User::where('is_admin', false)->where('ativo', true)->whereNotIn('id', $comQuota)->pluck('id');
+            foreach ($semQuota as $id) {
+                Quota::create(['user_id' => $id, 'ano' => $ano, 'valor' => $valor, 'estado' => 'pendente']);
+            }
+
+            // Quotas por pagar que tinham ficado a 0 (por exemplo, criadas ao aprovar a conta) recebem o valor do ano
+            $acertadas = Quota::where('ano', $ano)->where('valor', 0)->whereIn('estado', ['pendente', 'em_atraso'])->update(['valor' => $valor]);
+
+            $atrasadas = $request->boolean('marcar_atraso')
+                ? Quota::where('ano', '<', now()->year)->where('estado', 'pendente')->update(['estado' => 'em_atraso'])
+                : 0;
+
+            return [$semQuota->count(), $acertadas, $atrasadas];
+        });
+
+        $mensagem = "Quota de $ano: $criadas criadas, $acertadas acertadas para ".number_format($valor, 0, ',', '.').' MT.';
+        if ($atrasadas) {
+            $mensagem .= " $atrasadas quotas de anos anteriores passaram a «em atraso».";
+        }
+
+        return back()->with('estado', $mensagem);
     }
 
     public function criarQuota(Request $request): RedirectResponse

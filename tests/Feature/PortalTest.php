@@ -271,6 +271,43 @@ class PortalTest extends TestCase
             ->assertRedirect(route('membro.area'));
     }
 
+    public function test_admin_lanca_quota_anual_para_todos_os_membros(): void
+    {
+        $admin = $this->admin();
+        $ano = now()->year;
+        $semQuota = User::factory()->create(['carteira' => '111111', 'ativo' => true]);
+        $aZero = User::factory()->create(['carteira' => '222222', 'ativo' => true]);
+        $jaPagou = User::factory()->create(['carteira' => '333333', 'ativo' => true]);
+        $inactivo = User::factory()->create(['carteira' => '444444', 'ativo' => false]);
+        Quota::create(['user_id' => $aZero->id, 'ano' => $ano, 'valor' => 0, 'estado' => 'pendente']);
+        Quota::create(['user_id' => $jaPagou->id, 'ano' => $ano, 'valor' => 6000, 'estado' => 'paga', 'data_pagamento' => now()]);
+        Quota::create(['user_id' => $semQuota->id, 'ano' => $ano - 1, 'valor' => 6000, 'estado' => 'pendente']);
+
+        $this->actingAs($admin)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 0])->assertSessionHasErrors('valor');
+        $this->actingAs($admin)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 7500, 'marcar_atraso' => '1'])
+            ->assertRedirect()->assertSessionHas('estado');
+
+        $this->assertDatabaseHas('quotas', ['user_id' => $semQuota->id, 'ano' => $ano, 'valor' => 7500, 'estado' => 'pendente']);
+        $this->assertDatabaseHas('quotas', ['user_id' => $aZero->id, 'ano' => $ano, 'valor' => 7500]);
+        $this->assertDatabaseHas('quotas', ['user_id' => $jaPagou->id, 'ano' => $ano, 'valor' => 6000, 'estado' => 'paga']);
+        $this->assertDatabaseMissing('quotas', ['user_id' => $inactivo->id]);
+        $this->assertDatabaseMissing('quotas', ['user_id' => $admin->id]);
+        $this->assertDatabaseHas('quotas', ['user_id' => $semQuota->id, 'ano' => $ano - 1, 'estado' => 'em_atraso']);
+
+        // Lancar de novo nao duplica nem altera nada
+        $this->actingAs($admin)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 9000])->assertRedirect();
+        $this->assertDatabaseCount('quotas', 4);
+        $this->assertDatabaseHas('quotas', ['user_id' => $semQuota->id, 'ano' => $ano, 'valor' => 7500]);
+
+        // Uma conta aprovada depois recebe a quota do ano ja com o valor lancado
+        $this->actingAs($admin)->post('/admin/membros/'.$inactivo->id.'/aprovar')->assertRedirect();
+        $this->assertDatabaseHas('quotas', ['user_id' => $inactivo->id, 'ano' => $ano, 'valor' => 7500]);
+
+        $financeiroSoLeitura = User::factory()->create();
+        $financeiroSoLeitura->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'standard'])->save();
+        $this->actingAs($financeiroSoLeitura)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 1])->assertForbidden();
+    }
+
     public function test_admin_regista_pagamento_e_membro_emite_comprovativo(): void
     {
         $admin = $this->admin();

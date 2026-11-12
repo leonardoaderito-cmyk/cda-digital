@@ -11,6 +11,19 @@
 </div>
 
 @if(auth()->user()->pode('financeiro.gerir'))
+{{-- Autor: Leonardo (leonardoaderito-cmyk) - lancamento da quota anual para todos os membros activos --}}
+@php $anoLancar = (int) old('ano', now()->year); $valorSugerido = \App\Models\Quota::valorDoAno($anoLancar) ?: \App\Models\Quota::valorDoAno($anoLancar - 1); @endphp
+<section class="bg-white border border-zinc-200 rounded-lg p-5 mb-6">
+    <h2 class="text-lg font-semibold mb-1">Lançar quota anual</h2>
+    <p class="text-sm text-zinc-600 mb-4">Cria a quota do ano, como pendente, para os <strong>{{ $membros->count() }}</strong> membros activos que ainda não a têm, e dá este valor às quotas por pagar desse ano que estavam a 0. Quotas já pagas, isentas ou com outro valor não são alteradas.</p>
+    <form method="POST" action="{{ route('admin.quotas.lancar') }}" class="flex flex-wrap gap-3 items-end" onsubmit="return confirm('Lançar a quota deste ano para todos os membros activos?')">@csrf
+        <label class="flex flex-col gap-1 text-sm w-28">Ano<input name="ano" type="number" min="2000" max="2100" value="{{ $anoLancar }}" required class="border border-zinc-300 rounded px-2 py-2"></label>
+        <label class="flex flex-col gap-1 text-sm w-40">Valor da quota (MT)<input name="valor" type="number" min="1" value="{{ old('valor', $valorSugerido ?: '') }}" required class="border border-zinc-300 rounded px-2 py-2"></label>
+        <label class="flex items-center gap-2 text-sm flex-[1_1_18rem] pb-2"><input type="checkbox" name="marcar_atraso" value="1" @checked(old('marcar_atraso'))> Passar a «em atraso» as quotas pendentes de anos anteriores</label>
+        <button class="bg-blue-950 text-white rounded px-4 py-2">Lançar para todos</button>
+    </form>
+</section>
+
 <section class="bg-white border border-zinc-200 rounded-lg p-5 mb-8">
     <h2 class="text-lg font-semibold mb-4">Adicionar quota ou pagamento</h2>
     <form method="POST" action="{{ route('admin.quotas.criar') }}" class="flex flex-wrap gap-3 items-end">@csrf
