@@ -9,6 +9,7 @@ use App\Models\Evento;
 use App\Models\MembroPublico;
 use App\Models\NewsletterSubscricao;
 use App\Models\Noticia;
+use App\Models\Slide;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -25,6 +26,7 @@ class PublicoController extends Controller
                 ->orderBy('data_evento')
                 ->limit(4)
                 ->get(),
+            'slides' => Slide::where('activo', true)->orderBy('ordem')->orderBy('id')->get(),
             'tiposDocumento' => Documento::selectRaw('tipo, count(*) as total')->groupBy('tipo')->orderByDesc('total')->get(),
             'totais' => [
                 'membros' => MembroPublico::where('activo', true)->count(),

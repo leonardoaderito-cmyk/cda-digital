@@ -21,6 +21,7 @@
         'Conteúdo' => [
             ['admin.painel', 'Painel', 'M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z', []],
             ['admin.paginas', 'Páginas', 'M6 2h9l5 5v15H6zM14 2v6h6', [['admin.paginas', 'Todas as páginas'], ['admin.paginas.nova', 'Adicionar nova']]],
+            ['admin.slides', 'Carrossel', 'M6 5h12v14H6zM2 8v8M22 8v8', [['admin.slides', 'Todos os slides'], ['admin.slides.novo', 'Adicionar slide']]],
             ['admin.noticias', 'Notícias', 'M4 4h13v16H4zM17 8h3v12h-3M7 8h7M7 12h7M7 16h4', [['admin.noticias', 'Todas as notícias'], ['admin.noticias.nova', 'Adicionar nova']]],
             ['admin.eventos', 'Eventos', 'M4 6h16v15H4zM4 10h16M8 3v5M16 3v5', [['admin.eventos', 'Todos os eventos'], ['admin.eventos.novo', 'Adicionar novo']]],
             ['admin.imagens', 'Imagens', 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M9 9.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0', []],

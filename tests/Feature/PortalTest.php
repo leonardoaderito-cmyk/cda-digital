@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Evento;
 use App\Models\Imagem;
 use App\Models\NewsletterSubscricao;
+use App\Models\Noticia;
 use App\Models\Pagina;
+use App\Models\Slide;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -166,6 +168,37 @@ class PortalTest extends TestCase
 
         $this->actingAs($admin)->delete('/admin/imagens/'.$imagem->id)->assertRedirect();
         $this->assertFileDoesNotExist($pasta.'/'.basename($imagem->ficheiro));
+    }
+
+    public function test_admin_configura_o_carrossel(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin)->get('/admin/carrossel')->assertOk();
+        $this->actingAs($admin)->get('/admin/carrossel/novo')->assertOk();
+
+        $this->actingAs($admin)->post('/admin/carrossel', ['titulo' => 'Bem-vindo à CDA', 'texto' => 'Portal oficial.', 'botao_texto' => 'Conhecer', 'botao_url' => '/instituicao', 'activo' => '1'])->assertRedirect();
+        $this->actingAs($admin)->post('/admin/carrossel', ['titulo' => 'Quotas 2026', 'activo' => '1'])->assertRedirect();
+        $this->actingAs($admin)->post('/admin/carrossel', ['titulo' => 'Perigoso', 'botao_url' => 'javascript:alert(1)'])->assertSessionHasErrors('botao_url');
+
+        [$primeiro, $segundo] = Slide::orderBy('ordem')->get()->all();
+        $this->actingAs($admin)->get('/admin/carrossel/'.$primeiro->id.'/editar')->assertOk();
+        $this->get('/')->assertSeeInOrder(['Bem-vindo à CDA', 'Quotas 2026'])->assertSee('href="/instituicao"', false);
+
+        $this->actingAs($admin)->post('/admin/carrossel/'.$segundo->id.'/mover', ['sentido' => 'subir'])->assertRedirect();
+        $this->get('/')->assertSeeInOrder(['Quotas 2026', 'Bem-vindo à CDA']);
+
+        $this->actingAs($admin)->post('/admin/carrossel/'.$primeiro->id.'/alternar');
+        $this->get('/')->assertDontSee('Bem-vindo à CDA')->assertSee('Quotas 2026');
+    }
+
+    public function test_carrossel_sem_slides_mostra_noticias_e_slide_pode_vir_de_noticia(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Assembleia Geral marcada', 'texto' => 'Convocatória publicada.', 'data' => '2026-03-01']);
+        $this->get('/')->assertSee('carrossel', false)->assertSee('Ler mais');
+
+        $this->actingAs($admin)->post('/admin/carrossel/da-noticia', ['noticia' => Noticia::firstOrFail()->id])->assertRedirect();
+        $this->assertDatabaseHas('slides', ['titulo' => 'Assembleia Geral marcada', 'botao_url' => '/noticias/assembleia-geral-marcada']);
     }
 
     public function test_aviso_e_politica_de_cookies(): void

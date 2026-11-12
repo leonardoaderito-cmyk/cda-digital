@@ -1,35 +1,50 @@
 @extends('layouts.app')
 @section('conteudo')
 @php
-    $destaques = $noticias->take(4);
-    $meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    $noticiasActivas = \App\Models\Pagina::estaActiva('noticias');
     $imagemDe = fn ($caminho) => \Illuminate\Support\Str::startsWith($caminho, ['http://', 'https://', '/']) ? $caminho : asset('storage/'.$caminho);
+    // Carrossel: slides definidos em Administracao > Carrossel; sem nenhum activo, mostra as ultimas noticias
+    $destaques = $slides->map(fn ($s) => [
+        'etiqueta' => $s->etiqueta, 'titulo' => $s->titulo, 'texto' => $s->texto, 'imagem' => $s->imagem,
+        'botao' => $s->botao_url ? ($s->botao_texto ?: 'Saber mais') : null, 'url' => $s->botao_url,
+    ]);
+    if ($destaques->isEmpty() && $noticiasActivas) {
+        $destaques = $noticias->take(4)->map(fn ($n) => [
+            'etiqueta' => $n->categoria ?: 'Notícia', 'titulo' => $n->titulo,
+            'texto' => trim($n->data?->format('d/m/Y').' · '.\Illuminate\Support\Str::limit($n->resumo, 150), ' ·'),
+            'imagem' => $n->imagem ? $imagemDe($n->imagem) : null, 'botao' => 'Ler mais', 'url' => route('noticia', $n->slug),
+        ]);
+    }
+    $meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 @endphp
 
 {{-- Autor: Leonardo (leonardoaderito-cmyk) - pagina inicial em duas colunas, cores solidas --}}
 <div class="inicio-grelha">
     <div>
-        @if (\App\Models\Pagina::estaActiva('noticias'))
+        @if ($destaques->isNotEmpty())
         <section data-carrossel class="carrossel mb-8" aria-label="Destaques">
-            @foreach ($destaques as $n)
-                <article data-slide class="slide {{ $n->imagem ? '' : 'slide-sem-imagem' }}">
-                    @if ($n->imagem)<img src="{{ $imagemDe($n->imagem) }}" alt="" class="slide-imagem">@endif
+            @foreach ($destaques as $d)
+                <article data-slide class="slide {{ $d['imagem'] ? '' : 'slide-sem-imagem' }}">
+                    @if ($d['imagem'])<img src="{{ $d['imagem'] }}" alt="" class="slide-imagem">@endif
                     <div class="slide-texto">
-                        <span class="slide-etiqueta">{{ $n->categoria ?: 'Notícia' }}</span>
-                        <h1>{{ $n->titulo }}</h1>
-                        <p>{{ $n->data?->format('d/m/Y') }} &middot; {{ \Illuminate\Support\Str::limit($n->resumo, 150) }}</p>
-                        <a href="{{ route('noticia', $n->slug) }}" class="slide-ligacao">Ler mais</a>
+                        @if ($d['etiqueta'])<span class="slide-etiqueta">{{ $d['etiqueta'] }}</span>@endif
+                        <h1>{{ $d['titulo'] }}</h1>
+                        @if ($d['texto'])<p>{{ $d['texto'] }}</p>@endif
+                        @if ($d['botao'])<a href="{{ $d['url'] }}" class="slide-ligacao">{{ $d['botao'] }}</a>@endif
                     </div>
                 </article>
             @endforeach
             @if ($destaques->count() > 1)
                 <div class="carrossel-controlos">
                     <button data-anterior aria-label="Anterior" class="seta">&lsaquo;</button>
-                    @foreach ($destaques as $i => $n)<button data-ponto aria-label="Destaque {{ $i + 1 }}" class="ponto"></button>@endforeach
+                    @foreach ($destaques as $i => $d)<button data-ponto aria-label="Destaque {{ $i + 1 }}" class="ponto"></button>@endforeach
                     <button data-seguinte aria-label="Seguinte" class="seta">&rsaquo;</button>
                 </div>
             @endif
         </section>
+        @endif
+
+        @if ($noticiasActivas)
 
         <section class="mb-8">
             <div class="titulo-seccao">

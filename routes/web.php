@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\EventoController;
 use App\Http\Controllers\Admin\ImagemController;
 use App\Http\Controllers\Admin\PaginaController as AdminPaginaController;
+use App\Http\Controllers\Admin\SlideController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegistoController;
 use App\Http\Controllers\MembroController;
@@ -99,6 +100,18 @@ Route::prefix('admin/paginas')->name('admin.paginas')->middleware(['auth', 'admi
     Route::post('/{pagina}', 'update')->name('.actualizar');
     Route::post('/{pagina}/alternar', 'alternar')->name('.alternar');
     Route::delete('/{pagina}', 'destroy')->name('.apagar');
+});
+
+Route::prefix('admin/carrossel')->name('admin.slides')->middleware(['auth', 'admin'])->controller(SlideController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::get('/novo', 'create')->name('.novo');
+    Route::post('/', 'store')->name('.guardar');
+    Route::post('/da-noticia', 'daNoticia')->name('.da-noticia');
+    Route::get('/{slide}/editar', 'edit')->name('.editar');
+    Route::post('/{slide}', 'update')->name('.actualizar');
+    Route::post('/{slide}/alternar', 'alternar')->name('.alternar');
+    Route::post('/{slide}/mover', 'mover')->name('.mover');
+    Route::delete('/{slide}', 'destroy')->name('.apagar');
 });
 
 Route::prefix('admin/imagens')->name('admin.imagens')->middleware(['auth', 'admin'])->controller(ImagemController::class)->group(function () {
