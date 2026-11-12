@@ -68,5 +68,6 @@
 </main>
 
 @include('layouts._rodape')
+@include('layouts._cookies')
 </body>
 </html>

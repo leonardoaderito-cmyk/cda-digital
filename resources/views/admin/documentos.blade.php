@@ -1,7 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.admin')
 @section('titulo', 'Documentos')
 @section('conteudo')
-@include('admin._menu')
 <h1 class="text-2xl font-semibold mb-4">Documentos</h1>
 <form method="POST" action="{{ route('admin.documentos.guardar') }}" enctype="multipart/form-data" class="bg-white border border-zinc-200 rounded-lg p-4 mb-6 flex flex-wrap gap-3 items-end">
     @csrf

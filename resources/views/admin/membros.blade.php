@@ -1,7 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.admin')
 @section('titulo', 'Membros')
 @section('conteudo')
-@include('admin._menu')
 <h1 class="text-2xl font-semibold mb-4">Contas de membros</h1>
 <div class="tabela">
     <div class="tabela-linha tabela-cabecalho">

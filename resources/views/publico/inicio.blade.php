@@ -9,6 +9,7 @@
 {{-- Autor: Leonardo (leonardoaderito-cmyk) - pagina inicial em duas colunas, cores solidas --}}
 <div class="inicio-grelha">
     <div>
+        @if (\App\Models\Pagina::estaActiva('noticias'))
         <section data-carrossel class="carrossel mb-8" aria-label="Destaques">
             @foreach ($destaques as $n)
                 <article data-slide class="slide {{ $n->imagem ? '' : 'slide-sem-imagem' }}">
@@ -56,9 +57,11 @@
                 @endforelse
             </div>
         </section>
+        @endif
     </div>
 
     <aside>
+        @if (\App\Models\Pagina::estaActiva('documentos'))
         <section class="lateral-bloco">
             <div class="titulo-seccao">
                 <h2>Documentos</h2>
@@ -70,7 +73,9 @@
                 @endforeach
             </ul>
         </section>
+        @endif
 
+        @if (\App\Models\Pagina::estaActiva('eventos'))
         <section class="lateral-bloco">
             <div class="titulo-seccao">
                 <h2>Eventos</h2>
@@ -84,6 +89,7 @@
                 @endforelse
             </ul>
         </section>
+        @endif
 
         <section class="lateral-bloco">
             <div class="titulo-seccao"><h2>Membros</h2></div>
@@ -111,6 +117,7 @@
 
 <section class="acessos mt-10 mb-8" aria-label="Acesso rápido">
     @foreach ([['Documentos','Legislação, circulares e formulários','documentos','M6 2h9l5 5v15H6z'],['Directório','Despachantes aduaneiros registados','directorio','M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM4 21a8 8 0 0 1 16 0'],['Área do membro','Quotas e requerimentos','login','M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4'],['Contactos','Fale com a CDA','contactos','M4 4h16v13H8l-4 4z']] as [$t,$d,$rota,$icone])
+        @continue($rota !== 'login' && ! \App\Models\Pagina::estaActiva($rota))
         <a href="{{ route($rota) }}" class="acesso">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="{{ $icone }}"/></svg>
             <span><strong>{{ $t }}</strong><span>{{ $d }}</span></span>

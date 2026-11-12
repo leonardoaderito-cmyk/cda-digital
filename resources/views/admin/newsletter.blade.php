@@ -1,7 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.admin')
 @section('titulo', 'Newsletter')
 @section('conteudo')
-@include('admin._menu')
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
     <div>
         <h1 class="text-2xl font-semibold">Newsletter</h1>

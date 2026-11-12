@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Evento;
+use App\Models\Imagem;
 use App\Models\NewsletterSubscricao;
+use App\Models\Pagina;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 // Autor: Leonardo (leonardoaderito-cmyk)
@@ -83,6 +86,92 @@ class PortalTest extends TestCase
             ->assertOk()
             ->assertSee('Conferência Aduaneira')
             ->assertSee('Programa completo do encontro.');
+    }
+
+    private function admin(): User
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true])->save();
+
+        return $admin;
+    }
+
+    public function test_ecras_da_administracao_respondem(): void
+    {
+        $admin = $this->admin();
+        foreach (['/admin', '/admin/paginas', '/admin/paginas/nova', '/admin/noticias', '/admin/noticias/nova', '/admin/eventos', '/admin/imagens', '/admin/documentos', '/admin/membros', '/admin/quotas', '/admin/requerimentos', '/admin/mensagens', '/admin/newsletter'] as $url) {
+            $this->actingAs($admin)->get($url)->assertOk();
+        }
+        foreach (Pagina::all() as $pagina) {
+            $this->actingAs($admin)->get('/admin/paginas/'.$pagina->id.'/editar')->assertOk();
+        }
+    }
+
+    public function test_admin_desactiva_seccao_e_pagina(): void
+    {
+        $admin = $this->admin();
+        $this->get('/')->assertSee('href="'.route('eventos').'"', false);
+
+        $this->actingAs($admin)->post('/admin/paginas/'.Pagina::where('slug', 'eventos')->value('id').'/alternar')->assertRedirect();
+        $this->actingAs($admin)->post('/admin/paginas/'.Pagina::where('slug', 'historia')->value('id').'/alternar')->assertRedirect();
+
+        $this->get('/eventos')->assertNotFound();
+        $this->get('/historia')->assertNotFound();
+        $this->get('/')->assertOk()
+            ->assertDontSee('href="'.route('eventos').'"', false)
+            ->assertDontSee('href="'.route('historia').'"', false);
+
+        $this->actingAs($admin)->post('/admin/paginas/'.Pagina::where('slug', 'eventos')->value('id').'/alternar');
+        $this->get('/eventos')->assertOk();
+    }
+
+    public function test_admin_edita_e_cria_paginas_com_html_limpo(): void
+    {
+        $admin = $this->admin();
+        $instituicao = Pagina::where('slug', 'instituicao')->firstOrFail();
+
+        $this->actingAs($admin)->post('/admin/paginas/'.$instituicao->id, [
+            'titulo' => 'A Câmara',
+            'resumo' => 'Resumo novo.',
+            'conteudo' => '<h2>Texto editado</h2><p onclick="alert(1)">Olá</p><script>alert(2)</script><a href="javascript:alert(3)">x</a>',
+            'activa' => '1',
+        ])->assertRedirect();
+
+        $this->get('/instituicao')->assertOk()
+            ->assertSee('A Câmara')->assertSee('Texto editado')
+            ->assertDontSee('alert(', false)->assertDontSee('onclick', false);
+
+        $this->actingAs($admin)->post('/admin/paginas', ['titulo' => 'Código de Ética', 'conteudo' => '<p>Deveres do despachante.</p>', 'activa' => '1', 'no_menu' => '1'])->assertRedirect();
+        $this->get('/pagina/codigo-de-etica')->assertOk()->assertSee('Deveres do despachante.');
+        $this->get('/')->assertSee('/pagina/codigo-de-etica', false);
+
+        // Uma seccao do portal nao pode ser removida, so desactivada
+        $this->actingAs($admin)->delete('/admin/paginas/'.Pagina::where('slug', 'noticias')->value('id'))->assertForbidden();
+    }
+
+    public function test_admin_carrega_imagem_e_usa_a_numa_noticia(): void
+    {
+        $admin = $this->admin();
+        $pasta = public_path(Imagem::PASTA);
+
+        $this->actingAs($admin)->post('/admin/imagens', ['ficheiros' => [UploadedFile::fake()->image('Sede da CDA.png', 640, 480)]])->assertRedirect();
+        $imagem = Imagem::firstOrFail();
+        $this->assertFileExists(public_path($imagem->ficheiro));
+        $this->assertSame(640, $imagem->largura);
+
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Nova sede', 'texto' => 'Texto.', 'data' => '2026-02-01', 'imagem_biblioteca' => $imagem->id])->assertRedirect();
+        $this->get('/')->assertSee($imagem->url(), false);
+
+        $this->actingAs($admin)->post('/admin/imagens', ['ficheiros' => [UploadedFile::fake()->create('virus.php', 10)]])->assertSessionHasErrors();
+
+        $this->actingAs($admin)->delete('/admin/imagens/'.$imagem->id)->assertRedirect();
+        $this->assertFileDoesNotExist($pasta.'/'.basename($imagem->ficheiro));
+    }
+
+    public function test_aviso_e_politica_de_cookies(): void
+    {
+        $this->get('/')->assertSee('data-cookies', false)->assertSee('Só essenciais');
+        $this->get('/cookies')->assertOk()->assertSee('Política de cookies');
     }
 
     public function test_admin_pode_gerir_newsletter(): void

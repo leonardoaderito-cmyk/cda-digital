@@ -19,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // O estado das paginas e lido de novo em cada arranque da aplicacao
+        \App\Models\Pagina::esquecerEstados();
     }
 }

@@ -1,7 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.admin')
 @section('titulo', 'Eventos')
 @section('conteudo')
-@include('admin._menu')
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
     <h1 class="text-2xl font-semibold">Eventos</h1>
     <a href="{{ route('admin.eventos.novo') }}" class="bg-blue-950 text-white rounded px-4 py-2">Novo evento</a>

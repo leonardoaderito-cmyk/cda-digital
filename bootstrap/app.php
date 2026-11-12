@@ -12,7 +12,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->alias(['admin' => \App\Http\Middleware\ApenasAdmin::class]);
+        $middleware->alias([
+            'admin' => \App\Http\Middleware\ApenasAdmin::class,
+            'pagina' => \App\Http\Middleware\PaginaActiva::class,
+        ]);
         $middleware->appendToGroup('web', \App\Http\Middleware\CabecalhosSeguranca::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

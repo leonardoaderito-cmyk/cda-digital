@@ -1,7 +1,6 @@
-@extends('layouts.app')
+@extends('layouts.admin')
 @section('titulo', $evento->exists ? 'Editar evento' : 'Novo evento')
 @section('conteudo')
-@include('admin._menu')
 @php
     $blocos = old('blocos', $evento->blocos ?? []);
     $tipos = \App\Models\Evento::TIPOS_BLOCO;

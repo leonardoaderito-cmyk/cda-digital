@@ -103,3 +103,143 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
     if (!e.target.closest('[data-mega-item]')) megaFechar();
 });
+
+// Aviso de cookies: a escolha fica guardada 180 dias no cookie "cda_cookies"
+const avisoCookies = document.querySelector('[data-cookies]');
+if (avisoCookies) {
+    const lerEscolha = () => document.cookie.split('; ').find((c) => c.startsWith('cda_cookies='))?.split('=')[1];
+    if (!lerEscolha()) avisoCookies.hidden = false;
+    avisoCookies.querySelectorAll('[data-cookies-escolha]').forEach((botao) => botao.addEventListener('click', () => {
+        const seguro = location.protocol === 'https:' ? '; Secure' : '';
+        document.cookie = `cda_cookies=${botao.dataset.cookiesEscolha}; Max-Age=${180 * 24 * 60 * 60}; Path=/; SameSite=Lax${seguro}`;
+        avisoCookies.hidden = true;
+    }));
+    // "Definicoes de cookies" no rodape volta a mostrar o aviso
+    document.querySelectorAll('[data-cookies-abrir]').forEach((botao) => botao.addEventListener('click', () => {
+        avisoCookies.hidden = false;
+        avisoCookies.querySelector('button')?.focus();
+    }));
+}
+
+// Administracao: menu lateral no telemovel
+const adminToggle = document.querySelector('[data-admin-toggle]');
+adminToggle?.addEventListener('click', () => {
+    const aberto = document.getElementById('admin-lateral').classList.toggle('aberto');
+    adminToggle.setAttribute('aria-expanded', aberto);
+});
+
+// Administracao: janela da biblioteca de imagens (usada pelo editor e pela imagem de destaque)
+const biblioteca = document.getElementById('biblioteca');
+let aoEscolherImagem = null;
+const abrirBiblioteca = (aoEscolher) => {
+    aoEscolherImagem = aoEscolher;
+    biblioteca?.showModal();
+};
+biblioteca?.querySelector('[data-fechar-biblioteca]')?.addEventListener('click', () => biblioteca.close());
+biblioteca?.querySelectorAll('[data-imagem-url]').forEach((botao) => botao.addEventListener('click', () => {
+    aoEscolherImagem?.({ id: botao.dataset.imagemId, url: botao.dataset.imagemUrl, alt: botao.dataset.imagemAlt });
+    biblioteca.close();
+}));
+
+// Administracao: editor de paginas (texto formatado, com alternativa em HTML)
+document.querySelectorAll('[data-editor]').forEach((editor) => {
+    const area = editor.querySelector('[data-editor-area]');
+    const codigo = editor.querySelector('[data-editor-codigo]');
+    const barra = editor.querySelector('.editor-barra');
+    const botaoHtml = editor.querySelector('[data-html]');
+    let selecao = null;
+
+    const guardarSelecao = () => {
+        const s = window.getSelection();
+        if (s.rangeCount && area.contains(s.anchorNode)) selecao = s.getRangeAt(0);
+    };
+    const reporSelecao = () => {
+        area.focus();
+        if (!selecao) return;
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(selecao);
+    };
+    area.addEventListener('keyup', guardarSelecao);
+    area.addEventListener('mouseup', guardarSelecao);
+    document.execCommand('defaultParagraphSeparator', false, 'p');
+
+    barra.querySelectorAll('[data-cmd]').forEach((botao) => botao.addEventListener('click', () => {
+        reporSelecao();
+        document.execCommand(botao.dataset.cmd, false, botao.dataset.valor || null);
+        guardarSelecao();
+    }));
+    barra.querySelector('[data-ligacao]')?.addEventListener('click', () => {
+        const url = window.prompt('Endereço da ligação (ex.: /documentos ou https://...)');
+        if (!url) return;
+        reporSelecao();
+        document.execCommand('createLink', false, url.trim());
+    });
+    barra.querySelector('[data-abrir-biblioteca]')?.addEventListener('click', () => abrirBiblioteca(({ url, alt }) => {
+        reporSelecao();
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = alt || '';
+        const s = window.getSelection();
+        if (s.rangeCount && area.contains(s.anchorNode)) {
+            const r = s.getRangeAt(0);
+            r.collapse(false);
+            r.insertNode(img);
+        } else {
+            area.appendChild(img);
+        }
+    }));
+    // Clicar numa imagem do texto permite mudar a descricao ou remove-la
+    area.addEventListener('click', (e) => {
+        if (e.target.tagName !== 'IMG') return;
+        const alt = window.prompt('Texto alternativo da imagem (deixe vazio e confirme para a remover):', e.target.alt);
+        if (alt === null) return;
+        if (alt.trim() === '') e.target.remove();
+        else e.target.alt = alt.trim();
+    });
+
+    botaoHtml?.addEventListener('click', () => {
+        const paraCodigo = codigo.hidden;
+        if (paraCodigo) codigo.value = area.innerHTML.trim();
+        else area.innerHTML = codigo.value;
+        codigo.hidden = !paraCodigo;
+        area.hidden = paraCodigo;
+        botaoHtml.classList.toggle('activo', paraCodigo);
+        barra.querySelectorAll('button:not([data-html])').forEach((b) => { b.disabled = paraCodigo; });
+    });
+    editor.closest('form')?.addEventListener('submit', () => {
+        if (codigo.hidden) codigo.value = area.innerHTML.trim();
+    });
+});
+
+// Administracao: imagem de destaque da noticia
+document.querySelectorAll('[data-destaque]').forEach((caixa) => {
+    const pre = caixa.querySelector('[data-destaque-pre]');
+    const vazio = caixa.querySelector('[data-destaque-vazio]');
+    const id = caixa.querySelector('[data-destaque-id]');
+    const remover = caixa.querySelector('[data-destaque-remover]');
+    const ficheiro = caixa.querySelector('input[type=file]');
+    const mostrar = (url) => {
+        pre.hidden = !url;
+        vazio.hidden = !!url;
+        if (url) pre.src = url;
+    };
+    caixa.querySelector('[data-abrir-biblioteca]')?.addEventListener('click', () => abrirBiblioteca((img) => {
+        id.value = img.id;
+        remover.value = '0';
+        ficheiro.value = '';
+        mostrar(img.url);
+    }));
+    ficheiro.addEventListener('change', () => {
+        if (!ficheiro.files[0]) return;
+        id.value = '';
+        remover.value = '0';
+        mostrar(URL.createObjectURL(ficheiro.files[0]));
+    });
+    caixa.querySelector('[data-destaque-limpar]')?.addEventListener('click', () => {
+        id.value = '';
+        ficheiro.value = '';
+        remover.value = '1';
+        mostrar('');
+    });
+});

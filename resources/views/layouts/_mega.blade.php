@@ -46,6 +46,29 @@
                 : ['Já é membro?', 'Entre com o email ou o número de carteira.', 'Entrar', route('login')],
         ],
     ];
+
+    // Paginas criadas na administracao e marcadas para aparecer no menu
+    $extra = \App\Models\Pagina::where('tipo', 'conteudo')->where('activa', true)->where('no_menu', true)->orderBy('titulo')->get();
+    if ($extra->isNotEmpty()) {
+        $grupos['A CDA']['colunas']['Mais páginas'] = $extra->map(fn ($p) => [$p->titulo, $p->url()])->all();
+    }
+
+    // As ligacoes para paginas desactivadas na administracao saem do menu
+    $activa = fn (string $url) => \App\Models\Pagina::urlActiva($url);
+    foreach ($grupos as $titulo => $g) {
+        $g['colunas'] = array_filter(array_map(fn ($ligacoes) => array_values(array_filter($ligacoes, fn ($l) => $activa($l[1]))), $g['colunas']));
+        if (! $g['colunas']) {
+            unset($grupos[$titulo]);
+            continue;
+        }
+        if (! $activa($g['principal'][1])) {
+            $g['principal'] = reset($g['colunas'])[0];
+        }
+        if (isset($g['atalho']) && ! $activa($g['atalho'][3])) {
+            $g['atalho'] = null;
+        }
+        $grupos[$titulo] = $g;
+    }
 @endphp
 
 <nav class="mega" aria-label="Principal">
@@ -75,6 +98,7 @@
                                 </ul>
                             </div>
                         @endforeach
+                        @if (! empty($g['pesquisa']) || ! empty($g['atalho']))
                         <div class="mega-atalho">
                             @if (! empty($g['pesquisa']))
                                 <h3>Pesquisar documentos</h3>
@@ -89,11 +113,16 @@
                                 <a href="{{ $g['atalho'][3] }}" class="mega-atalho-botao">{{ $g['atalho'][2] }}</a>
                             @endif
                         </div>
+                        @endif
                     </div>
                 </div>
             </li>
         @endforeach
-        <li class="mega-item"><a href="{{ route('eventos') }}" class="mega-botao {{ request()->routeIs('eventos', 'evento') ? 'activo' : '' }}">Eventos</a></li>
-        <li class="mega-item"><a href="{{ route('contactos') }}" class="mega-botao {{ request()->routeIs('contactos') ? 'activo' : '' }}">Contactos</a></li>
+        @if (\App\Models\Pagina::estaActiva('eventos'))
+            <li class="mega-item"><a href="{{ route('eventos') }}" class="mega-botao {{ request()->routeIs('eventos', 'evento') ? 'activo' : '' }}">Eventos</a></li>
+        @endif
+        @if (\App\Models\Pagina::estaActiva('contactos'))
+            <li class="mega-item"><a href="{{ route('contactos') }}" class="mega-botao {{ request()->routeIs('contactos') ? 'activo' : '' }}">Contactos</a></li>
+        @endif
     </ul>
 </nav>

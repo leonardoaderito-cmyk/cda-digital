@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Auditoria;
 use App\Models\ContactoMensagem;
 use App\Models\Documento;
+use App\Models\Evento;
+use App\Models\Imagem;
+use App\Models\Pagina;
 use App\Models\NewsletterSubscricao;
 use App\Models\Noticia;
 use App\Models\Quota;
@@ -25,6 +29,14 @@ class AdminController extends Controller
             'mensagens' => ContactoMensagem::where('lida', false)->count(),
             'documentos' => Documento::count(),
             'noticias' => Noticia::count(),
+            'paginas' => Pagina::count(),
+            'paginasInactivas' => Pagina::where('activa', false)->count(),
+            'eventos' => Evento::count(),
+            'imagens' => Imagem::count(),
+            'subscritores' => NewsletterSubscricao::where('activo', true)->count(),
+            'ultimasNoticias' => Noticia::orderByDesc('data')->limit(5)->get(),
+            'actividade' => Auditoria::orderByDesc('id')->limit(8)->get(),
+            'utilizadores' => User::pluck('name', 'id'),
         ]);
     }
 
@@ -141,23 +153,67 @@ class AdminController extends Controller
         return view('admin.noticias', ['noticias' => Noticia::orderByDesc('data')->get()]);
     }
 
+    public function novaNoticia()
+    {
+        return view('admin.noticia_form', ['noticia' => new Noticia(['data' => now(), 'publicada' => true]), 'imagens' => Imagem::latest()->get()]);
+    }
+
+    public function editarNoticia(Noticia $noticia)
+    {
+        return view('admin.noticia_form', ['noticia' => $noticia, 'imagens' => Imagem::latest()->get()]);
+    }
+
     public function guardarNoticia(Request $request): RedirectResponse
+    {
+        $dados = $this->validarNoticia($request);
+
+        $base = Str::slug($dados['titulo']) ?: 'noticia';
+        $slug = $base;
+        for ($i = 2; Noticia::where('slug', $slug)->exists(); $i++) {
+            $slug = $base.'-'.$i;
+        }
+
+        $noticia = Noticia::create($dados + ['slug' => $slug, 'publicada' => $request->has('publicada') ? $request->boolean('publicada') : true]);
+
+        return redirect()->route('admin.noticias.editar', $noticia)->with('estado', 'Notícia guardada.');
+    }
+
+    public function actualizarNoticia(Request $request, Noticia $noticia): RedirectResponse
+    {
+        $noticia->update($this->validarNoticia($request, $noticia) + ['publicada' => $request->boolean('publicada')]);
+
+        return back()->with('estado', 'Notícia actualizada.');
+    }
+
+    /** Valida a noticia e resolve a imagem de destaque: ficheiro novo, imagem da biblioteca ou nenhuma. */
+    private function validarNoticia(Request $request, ?Noticia $noticia = null): array
     {
         $dados = $request->validate([
             'titulo' => ['required', 'string', 'max:300'],
             'categoria' => ['nullable', 'string', 'max:80'],
             'data' => ['required', 'date'],
             'texto' => ['required', 'string'],
+            'imagem_ficheiro' => ['nullable', ...Imagem::REGRAS],
+            'imagem_biblioteca' => ['nullable', 'integer', 'exists:imagens,id'],
         ]);
 
-        $slug = Str::slug($dados['titulo']);
-        for ($i = 2; Noticia::where('slug', $slug)->exists(); $i++) {
-            $slug = Str::slug($dados['titulo']).'-'.$i;
+        $imagem = $noticia?->imagem;
+        if ($request->hasFile('imagem_ficheiro')) {
+            $imagem = Imagem::guardar($request->file('imagem_ficheiro'), $dados['titulo'])->url();
+        } elseif (! empty($dados['imagem_biblioteca'])) {
+            $imagem = Imagem::findOrFail($dados['imagem_biblioteca'])->url();
+        } elseif ($request->boolean('remover_imagem')) {
+            $imagem = null;
         }
 
-        Noticia::create($dados + ['slug' => $slug, 'resumo' => Str::limit($dados['texto'], 220)]);
-
-        return back()->with('estado', 'Noticia publicada.');
+        return [
+            'titulo' => $dados['titulo'],
+            'categoria' => $dados['categoria'] ?? null,
+            'data' => $dados['data'],
+            'texto' => $dados['texto'],
+            'resumo' => Str::limit($dados['texto'], 220),
+            'imagem' => $imagem,
+        ];
     }
 
     public function alternarNoticia(Noticia $noticia): RedirectResponse
