@@ -1,53 +1,81 @@
 @extends('layouts.admin')
 @section('titulo', 'Membros')
 @section('conteudo')
-<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
-    <div><h1 class="text-2xl font-semibold">Contas de membros</h1><p class="text-sm text-zinc-600 mt-1">Crie acessos, envie as primeiras credenciais e acompanhe as entradas.</p></div>
-    <span class="bg-zinc-100 rounded-full px-3 py-1 text-sm">{{ $membros->count() }} contas</span>
+@php
+    $gere = auth()->user()->pode('membros.gerir');
+    $regulares = $membros->filter(fn ($m) => $m->estaRegular())->pluck('id')->flip();
+@endphp
+<div class="admin-cabecalho">
+    <div><h1>Contas de membros</h1><p>Crie acessos, envie as primeiras credenciais e acompanhe as entradas.</p></div>
 </div>
 
-@if(auth()->user()->pode('membros.gerir'))
-<section class="bg-white border border-zinc-200 rounded-lg p-5 mb-8">
-    <h2 class="text-lg font-semibold mb-1">Criar acesso de membro</h2>
-    <p class="text-sm text-zinc-600 mb-4">O membro receberá no email uma ligação válida por 72 horas para definir a sua própria senha.</p>
-    <form method="POST" action="{{ route('admin.membros.criar') }}" class="flex flex-wrap gap-3 items-end">
+<div class="admin-stats">
+    <div class="admin-stat"><span>Contas</span><strong>{{ $membros->count() }}</strong></div>
+    <div class="admin-stat {{ $membros->where('ativo', false)->count() ? 'destaque' : '' }}"><span>Por aprovar</span><strong>{{ $membros->where('ativo', false)->count() }}</strong></div>
+    <div class="admin-stat ok"><span>Situação regularizada</span><strong>{{ $regulares->count() }}</strong></div>
+    <div class="admin-stat"><span>Sem senha definida</span><strong>{{ $membros->whereNull('senha_definida_em')->count() }}</strong></div>
+    <div class="admin-stat"><span>Membros sem conta</span><strong>{{ $semConta->count() }}</strong><small>na lista da CDA</small></div>
+</div>
+
+@if ($gere)
+<details class="admin-caixa" @if ($errors->any() || $membros->isEmpty()) open @endif>
+    <summary>Criar acesso de membro <small>— envia por email a ligação para definir a senha</small></summary>
+    <p>O membro recebe no email o seu número de membro e uma ligação, válida por 72 horas, para definir a sua própria senha.</p>
+    <form method="POST" action="{{ route('admin.membros.criar') }}" class="admin-form">
         @csrf
-        <label class="flex flex-col gap-1 text-sm flex-[2_1_18rem]">Membro da lista CDA
-            <select name="membro_publico_id" required class="border border-zinc-300 rounded px-3 py-2">
+        <label class="largo">Membro da lista CDA
+            <select name="membro_publico_id" required>
                 <option value="">Seleccionar membro sem conta</option>
                 @foreach ($semConta as $registo)<option value="{{ $registo->id }}" @selected(old('membro_publico_id') == $registo->id)>{{ $registo->nome }} — {{ $registo->n_carta }}</option>@endforeach
             </select>
         </label>
-        <label class="flex flex-col gap-1 text-sm flex-1 min-w-52">Email registado
-            <input type="email" name="email" value="{{ old('email') }}" required class="border border-zinc-300 rounded px-3 py-2">
-        </label>
-        <label class="flex flex-col gap-1 text-sm flex-1 min-w-40">Telefone
-            <input name="telefone" value="{{ old('telefone') }}" class="border border-zinc-300 rounded px-3 py-2">
-        </label>
-        <button class="bg-blue-950 text-white rounded px-4 py-2">Criar e enviar acesso</button>
+        <label>Email registado<input type="email" name="email" value="{{ old('email') }}" required></label>
+        <label>Telefone<input name="telefone" value="{{ old('telefone') }}"></label>
+        <div><button class="admin-botao">Criar e enviar acesso</button></div>
     </form>
-</section>
+</details>
 @endif
 
-<div class="tabela">
-    <div class="tabela-linha tabela-cabecalho">
-        <div class="tabela-celula" style="flex-grow:2">Membro</div><div class="tabela-celula">Contacto</div><div class="tabela-celula">Acesso</div><div class="tabela-celula">Situação financeira</div><div class="tabela-celula" style="flex-grow:2">Acções</div>
-    </div>
-    @forelse ($membros as $m)
-        <div class="tabela-linha">
-            <div class="tabela-celula" style="flex-grow:2"><strong>{{ $m->name }}</strong><small class="block text-zinc-500">N.º {{ $m->carteira ?: '—' }} · {{ $m->entidade ?: 'Sem entidade' }}</small></div>
-            <div class="tabela-celula">{{ $m->email }}<small class="block text-zinc-500">{{ $m->telefone ?: 'Sem telefone' }}</small></div>
-            <div class="tabela-celula"><span class="{{ $m->ativo ? 'text-emerald-700' : 'text-amber-700' }} font-medium">{{ $m->ativo ? 'Activa' : 'Pendente' }}</span><small class="block text-zinc-500">{{ $m->ultimo_login ? 'Última entrada '.$m->ultimo_login->format('d/m/Y H:i') : 'Nunca entrou' }}</small><small class="block text-zinc-500">{{ $m->senha_definida_em ? 'Senha definida' : ($m->credenciais_enviadas_em ? 'Convite enviado' : 'Sem convite') }}</small></div>
-            <div class="tabela-celula"><span class="{{ $m->estaRegular() ? 'text-emerald-700' : 'text-amber-700' }} font-medium">{{ $m->estaRegular() ? 'Regularizada' : 'Não regularizada' }}</span></div>
-            <div class="tabela-celula" style="flex-grow:2"><div class="flex flex-wrap gap-3 items-center">
-                @if(auth()->user()->pode('membros.gerir'))
-                <form method="POST" action="{{ route($m->ativo ? 'admin.membros.desactivar' : 'admin.membros.aprovar', $m) }}">@csrf<button class="text-blue-800 hover:underline">{{ $m->ativo ? 'Desactivar' : 'Aprovar' }}</button></form>
-                <form method="POST" action="{{ route('admin.membros.credenciais', $m) }}">@csrf<button class="text-blue-800 hover:underline">{{ $m->credenciais_enviadas_em ? 'Reenviar credenciais' : 'Enviar credenciais' }}</button></form>
-                @else<span class="text-zinc-500">Consulta</span>@endif
-            </div></div>
-        </div>
-    @empty
-        <div class="tabela-linha"><div class="tabela-celula">Ainda não há contas registadas.</div></div>
-    @endforelse
+@if ($membros->isEmpty())
+    <div class="admin-vazio"><strong>Ainda não há contas de membros</strong>Crie o primeiro acesso a partir da lista da CDA.</div>
+@else
+<div class="admin-ferramentas">
+    <span class="admin-nota" style="margin:0" data-filtro-conta>{{ $membros->count() }} contas</span>
+    <label class="admin-pesquisa">Procurar <input type="search" data-filtro="#tabela-membros" placeholder="Nome, número, email…"></label>
 </div>
+<table class="admin-tabela" id="tabela-membros">
+    <thead><tr><th>Membro</th><th>Contacto</th><th>Conta</th><th>Credenciais</th><th>Situação financeira</th></tr></thead>
+    <tbody>
+        @foreach ($membros as $m)
+            <tr class="{{ $m->ativo ? '' : 'destaque' }}">
+                <td>
+                    <strong>{{ $m->name }}</strong>
+                    <small>N.º {{ $m->carteira ?: '—' }} &middot; {{ $m->entidade ?: 'Sem entidade' }}</small>
+                    @if ($gere)
+                    <div class="admin-accoes">
+                        <form method="POST" action="{{ route($m->ativo ? 'admin.membros.desactivar' : 'admin.membros.aprovar', $m) }}">@csrf<button class="{{ $m->ativo ? 'perigo' : '' }}">{{ $m->ativo ? 'Desactivar' : 'Aprovar' }}</button></form>
+                        <form method="POST" action="{{ route('admin.membros.credenciais', $m) }}">@csrf<button>{{ $m->credenciais_enviadas_em ? 'Reenviar credenciais' : 'Enviar credenciais' }}</button></form>
+                    </div>
+                    @endif
+                </td>
+                <td>{{ $m->email }}<small>{{ $m->telefone ?: 'Sem telefone' }}</small></td>
+                <td>
+                    <span class="admin-estado {{ $m->ativo ? 'ligado' : 'alerta' }}">{{ $m->ativo ? 'Activa' : 'Por aprovar' }}</span>
+                    <small>{{ $m->ultimo_login ? 'Última entrada '.$m->ultimo_login->format('d/m/Y H:i') : 'Nunca entrou' }}</small>
+                </td>
+                <td>
+                    @if ($m->senha_definida_em)
+                        <span class="admin-estado ligado">Senha definida</span><small>{{ $m->senha_definida_em->format('d/m/Y') }}</small>
+                    @elseif ($m->credenciais_enviadas_em)
+                        <span class="admin-estado aviso">Convite enviado</span><small>{{ $m->credenciais_enviadas_em->format('d/m/Y H:i') }}</small>
+                    @else
+                        <span class="admin-estado neutro">Sem convite</span>
+                    @endif
+                </td>
+                <td><span class="admin-estado {{ isset($regulares[$m->id]) ? 'ligado' : 'alerta' }}">{{ isset($regulares[$m->id]) ? 'Regularizada' : 'Não regularizada' }}</span></td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
+@endif
 @endsection

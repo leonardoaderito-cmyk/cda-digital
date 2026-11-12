@@ -269,3 +269,23 @@ document.querySelectorAll('[data-destaque]').forEach((caixa) => {
         mostrar('');
     });
 });
+
+// Administracao: procura rapida nas tabelas (filtra as linhas pelo texto escrito)
+document.querySelectorAll('[data-filtro]').forEach((campo) => {
+    const tabela = document.querySelector(campo.dataset.filtro);
+    if (!tabela) return;
+    const linhas = [...tabela.querySelectorAll('tbody tr')];
+    const conta = campo.closest('.admin-ferramentas')?.querySelector('[data-filtro-conta]');
+    const rotulo = conta?.textContent.replace(/^\d+\s*/, '') ?? '';
+    const normalizar = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    campo.addEventListener('input', () => {
+        const termo = normalizar(campo.value.trim());
+        let visiveis = 0;
+        linhas.forEach((linha) => {
+            const mostra = !termo || normalizar(linha.textContent).includes(termo);
+            linha.hidden = !mostra;
+            if (mostra) visiveis++;
+        });
+        if (conta) conta.textContent = termo ? `${visiveis} de ${linhas.length} ${rotulo}` : `${linhas.length} ${rotulo}`;
+    });
+});

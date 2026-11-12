@@ -1,57 +1,86 @@
 @extends('layouts.admin')
 @section('titulo', 'Utilizadores e acessos')
 @section('conteudo')
-<div class="admin-cabecalho"><div><h1>Utilizadores e acessos</h1><p>Defina responsabilidades e consulte os logs da administração.</p></div></div>
-
-<div class="grid md:grid-cols-2 xl:grid-cols-5 gap-3 mb-7">
-    @foreach([
-        ['Administrador geral','Acesso total, utilizadores e níveis.'],
-        ['Gestor de adesões','Aprova membros, contas e requerimentos.'],
-        ['Gestor financeiro','Quotas, pagamentos e regularidade.'],
-        ['Editor de conteúdos','Páginas, notícias, eventos e comunicação.'],
-        ['Utilizador standard','Consulta membros e situação financeira.'],
-    ] as [$titulo,$texto])
-    <div class="bg-white border border-zinc-200 rounded p-4"><strong class="block text-sm">{{ $titulo }}</strong><span class="text-xs text-zinc-500">{{ $texto }}</span></div>
-    @endforeach
+<div class="admin-cabecalho">
+    <div><h1>Utilizadores e acessos</h1><p>Defina quem administra o portal, com que responsabilidades, e consulte o registo de actividade.</p></div>
 </div>
 
-<section class="bg-white border border-zinc-200 rounded-lg p-5 mb-8">
-    <h2 class="text-lg font-semibold mb-1">Adicionar utilizador administrativo</h2>
-    <p class="text-sm text-zinc-600 mb-4">Será enviada uma ligação para o utilizador definir a própria senha.</p>
-    <form method="POST" action="{{ route('admin.utilizadores.criar') }}" class="flex flex-wrap gap-3 items-end">@csrf
-        <label class="flex flex-col gap-1 text-sm flex-1 min-w-52">Nome<input name="name" value="{{ old('name') }}" required class="border border-zinc-300 rounded px-3 py-2"></label>
-        <label class="flex flex-col gap-1 text-sm flex-1 min-w-52">Email<input type="email" name="email" value="{{ old('email') }}" required class="border border-zinc-300 rounded px-3 py-2"></label>
-        <label class="flex flex-col gap-1 text-sm min-w-52">Nível<select name="nivel_acesso" class="border border-zinc-300 rounded px-3 py-2">@foreach($niveis as $valor=>$rotulo)<option value="{{ $valor }}">{{ $rotulo }}</option>@endforeach</select></label>
-        <button class="bg-blue-950 text-white rounded px-4 py-2">Criar e enviar acesso</button>
-    </form>
+<section class="admin-caixa">
+    <h2>Níveis de acesso</h2>
+    <dl class="admin-niveis">
+        @foreach ([
+            ['Administrador geral', 'Acesso total, incluindo utilizadores e níveis.'],
+            ['Gestor de adesões', 'Aprova membros, contas e requerimentos.'],
+            ['Gestor financeiro', 'Quotas, pagamentos e regularidade.'],
+            ['Editor de conteúdos', 'Páginas, notícias, eventos e comunicação.'],
+            ['Utilizador standard', 'Só consulta membros e situação financeira.'],
+        ] as [$titulo, $texto])
+            <div><dt>{{ $titulo }}</dt><dd>{{ $texto }}</dd></div>
+        @endforeach
+    </dl>
 </section>
 
-<h2 class="text-lg font-semibold mb-3">Contas administrativas</h2>
-<div class="tabela mb-9">
-    <div class="tabela-linha tabela-cabecalho"><div class="tabela-celula" style="flex-grow:2">Utilizador</div><div class="tabela-celula">Último acesso</div><div class="tabela-celula" style="flex-grow:2">Nível e estado</div><div class="tabela-celula">Credenciais</div></div>
-    @foreach($utilizadores as $u)
-    <div class="tabela-linha">
-        <div class="tabela-celula" style="flex-grow:2"><strong>{{ $u->name }}</strong><small class="block text-zinc-500">{{ $u->email }}</small></div>
-        <div class="tabela-celula">{{ $u->ultimo_login?->format('d/m/Y H:i') ?: 'Nunca entrou' }}</div>
-        <div class="tabela-celula" style="flex-grow:2">
-            <form method="POST" action="{{ route('admin.utilizadores.actualizar', $u) }}" class="flex flex-wrap gap-2 items-center">@csrf
-                <select name="nivel_acesso" class="border border-zinc-300 rounded px-2 py-1">@foreach($niveis as $valor=>$rotulo)<option value="{{ $valor }}" @selected($u->nivel_acesso===$valor)>{{ $rotulo }}</option>@endforeach</select>
-                <label class="inline-flex items-center gap-1 text-sm"><input type="checkbox" name="ativo" value="1" @checked($u->ativo)> Activo</label>
-                <button class="text-blue-800 hover:underline">Guardar</button>
-            </form>
-        </div>
-        <div class="tabela-celula"><form method="POST" action="{{ route('admin.utilizadores.credenciais', $u) }}">@csrf<button class="text-blue-800 hover:underline">{{ $u->credenciais_enviadas_em ? 'Reenviar acesso' : 'Enviar acesso' }}</button></form></div>
-    </div>
-    @endforeach
-</div>
+<details class="admin-caixa" @if ($errors->any()) open @endif>
+    <summary>Adicionar utilizador administrativo <small>— envia por email a ligação para definir a senha</small></summary>
+    <form method="POST" action="{{ route('admin.utilizadores.criar') }}" class="admin-form">@csrf
+        <label>Nome<input name="name" value="{{ old('name') }}" required></label>
+        <label>Email<input type="email" name="email" value="{{ old('email') }}" required></label>
+        <label>Nível<select name="nivel_acesso">@foreach ($niveis as $valor => $rotulo)<option value="{{ $valor }}" @selected(old('nivel_acesso') === $valor)>{{ $rotulo }}</option>@endforeach</select></label>
+        <div><button class="admin-botao">Criar e enviar acesso</button></div>
+    </form>
+</details>
 
-<h2 class="text-lg font-semibold mb-1">Logs de actividade</h2>
-<p class="text-sm text-zinc-600 mb-3">Registo das alterações efectuadas pelos utilizadores administrativos.</p>
-<div class="tabela">
-    <div class="tabela-linha tabela-cabecalho"><div class="tabela-celula">Data</div><div class="tabela-celula" style="flex-grow:2">Utilizador</div><div class="tabela-celula" style="flex-grow:2">Acção</div><div class="tabela-celula">Alvo</div><div class="tabela-celula">IP</div></div>
-    @forelse($actividade as $a)
-    <div class="tabela-linha"><div class="tabela-celula">{{ IlluminateSupportCarbon::parse($a->created_at)->format('d/m/Y H:i') }}</div><div class="tabela-celula" style="flex-grow:2">{{ $a->user?->name ?: 'Sistema' }}</div><div class="tabela-celula" style="flex-grow:2"><code>{{ $a->accao }}</code></div><div class="tabela-celula">{{ $a->detalhe ?: '—' }}</div><div class="tabela-celula">{{ $a->ip ?: '—' }}</div></div>
-    @empty<div class="tabela-linha"><div class="tabela-celula">Sem actividade registada.</div></div>@endforelse
+<h2 class="admin-seccao">Contas administrativas</h2>
+<p>{{ $utilizadores->count() }} utilizadores com acesso à administração.</p>
+<table class="admin-tabela">
+    <thead><tr><th>Utilizador</th><th>Estado</th><th>Último acesso</th><th>Nível e estado</th></tr></thead>
+    <tbody>
+        @foreach ($utilizadores as $u)
+            <tr class="{{ $u->ativo ? '' : 'inactiva' }}">
+                <td>
+                    <strong>{{ $u->name }}</strong>@if ($u->is(auth()->user())) <small style="display:inline">(a sua conta)</small>@endif
+                    <small>{{ $u->email }}</small>
+                    <div class="admin-accoes">
+                        <form method="POST" action="{{ route('admin.utilizadores.credenciais', $u) }}">@csrf<button>{{ $u->credenciais_enviadas_em ? 'Reenviar acesso' : 'Enviar acesso' }}</button></form>
+                    </div>
+                </td>
+                <td><span class="admin-estado {{ $u->ativo ? 'ligado' : 'desligado' }}">{{ $u->ativo ? 'Activo' : 'Inactivo' }}</span><small>{{ $u->nivelLabel() }}</small></td>
+                <td>{{ $u->ultimo_login?->format('d/m/Y H:i') ?: 'Nunca entrou' }}</td>
+                <td>
+                    <form method="POST" action="{{ route('admin.utilizadores.actualizar', $u) }}" class="admin-inline">@csrf
+                        <select name="nivel_acesso" aria-label="Nível de {{ $u->name }}">@foreach ($niveis as $valor => $rotulo)<option value="{{ $valor }}" @selected($u->nivel_acesso === $valor)>{{ $rotulo }}</option>@endforeach</select>
+                        <label><input type="checkbox" name="ativo" value="1" @checked($u->ativo)> Activo</label>
+                        <button class="admin-botao admin-botao-s">Guardar</button>
+                    </form>
+                </td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
+
+<h2 class="admin-seccao">Registo de actividade</h2>
+<p>Alterações efectuadas na administração e entradas no portal, das mais recentes para as mais antigas.</p>
+@if ($actividade->isEmpty())
+    <div class="admin-vazio"><strong>Sem actividade registada</strong></div>
+@else
+<div class="admin-ferramentas">
+    <span class="admin-nota" style="margin:0">{{ $actividade->total() }} registos</span>
+    <label class="admin-pesquisa">Procurar nesta página <input type="search" data-filtro="#tabela-logs" placeholder="Utilizador, acção, IP…"></label>
 </div>
+<table class="admin-tabela" id="tabela-logs">
+    <thead><tr><th>Data</th><th>Utilizador</th><th>Acção</th><th>Alvo</th><th>IP</th></tr></thead>
+    <tbody>
+        @foreach ($actividade as $a)
+            <tr>
+                <td>{{ \Illuminate\Support\Carbon::parse($a->created_at)->format('d/m/Y H:i') }}</td>
+                <td>{{ $a->user?->name ?: 'Sistema' }}</td>
+                <td><code>{{ $a->accao }}</code></td>
+                <td>{{ $a->detalhe ?: '—' }}</td>
+                <td>{{ $a->ip ?: '—' }}</td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
 <div class="mt-4">{{ $actividade->links() }}</div>
+@endif
 @endsection

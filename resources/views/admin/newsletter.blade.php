@@ -1,32 +1,36 @@
 @extends('layouts.admin')
 @section('titulo', 'Newsletter')
 @section('conteudo')
-<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-    <div>
-        <h1 class="text-2xl font-semibold">Newsletter</h1>
-        <p class="text-zinc-600">{{ $subscricoes->total() }} contactos registados.</p>
-    </div>
-    <a href="{{ route('admin.newsletter.exportar') }}" class="bg-blue-950 text-white rounded px-4 py-2">Exportar CSV</a>
+<div class="admin-cabecalho">
+    <div><h1>Newsletter</h1><p>{{ $subscricoes->total() }} contactos registados pelo formulário do portal.</p></div>
+    <div class="admin-cabecalho-accoes"><a href="{{ route('admin.newsletter.exportar') }}" class="admin-botao">Exportar CSV</a></div>
 </div>
-<div class="tabela">
-    <div class="tabela-linha tabela-cabecalho">
-        <div class="tabela-celula">Nome</div>
-        <div class="tabela-celula" style="flex-grow:2">Email</div>
-        <div class="tabela-celula tabela-celula-estreita">Estado</div>
-        <div class="tabela-celula tabela-celula-estreita">Acção</div>
-    </div>
-    @forelse ($subscricoes as $subscricao)
-        <div class="tabela-linha">
-            <div class="tabela-celula">{{ $subscricao->nome ?: '—' }}</div>
-            <div class="tabela-celula" style="flex-grow:2">{{ $subscricao->email }}</div>
-            <div class="tabela-celula tabela-celula-estreita">{{ $subscricao->activo ? 'Activo' : 'Inactivo' }}</div>
-            <div class="tabela-celula tabela-celula-estreita">
-                <form method="POST" action="{{ route('admin.newsletter.alternar', $subscricao) }}">@csrf<button class="text-blue-800 hover:underline">{{ $subscricao->activo ? 'Desactivar' : 'Reactivar' }}</button></form>
-            </div>
-        </div>
-    @empty
-        <div class="tabela-linha"><div class="tabela-celula">Ainda não há subscrições.</div></div>
-    @endforelse
+
+@if ($subscricoes->isEmpty())
+    <div class="admin-vazio"><strong>Ainda não há subscrições</strong>Os visitantes subscrevem na página inicial e no rodapé do portal.</div>
+@else
+<div class="admin-ferramentas">
+    <span class="admin-nota" style="margin:0">Página {{ $subscricoes->currentPage() }} de {{ $subscricoes->lastPage() }}</span>
+    <label class="admin-pesquisa">Procurar nesta página <input type="search" data-filtro="#tabela-newsletter" placeholder="Nome ou email…"></label>
 </div>
-<div class="mt-6">{{ $subscricoes->links() }}</div>
+<table class="admin-tabela" id="tabela-newsletter">
+    <thead><tr><th>Email</th><th>Nome</th><th>Subscrito em</th><th>Estado</th></tr></thead>
+    <tbody>
+        @foreach ($subscricoes as $subscricao)
+            <tr class="{{ $subscricao->activo ? '' : 'inactiva' }}">
+                <td>
+                    <strong>{{ $subscricao->email }}</strong>
+                    <div class="admin-accoes">
+                        <form method="POST" action="{{ route('admin.newsletter.alternar', $subscricao) }}">@csrf<button class="{{ $subscricao->activo ? 'perigo' : '' }}">{{ $subscricao->activo ? 'Desactivar' : 'Reactivar' }}</button></form>
+                    </div>
+                </td>
+                <td>{{ $subscricao->nome ?: '—' }}</td>
+                <td>{{ $subscricao->created_at?->format('d/m/Y H:i') }}</td>
+                <td><span class="admin-estado {{ $subscricao->activo ? 'ligado' : 'desligado' }}">{{ $subscricao->activo ? 'Activo' : 'Inactivo' }}</span></td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
+<div class="mt-4">{{ $subscricoes->links() }}</div>
+@endif
 @endsection

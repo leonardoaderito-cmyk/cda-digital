@@ -1,25 +1,42 @@
 @extends('layouts.admin')
 @section('titulo', 'Mensagens')
 @section('conteudo')
-<h1 class="text-2xl font-semibold mb-4">Mensagens de contacto</h1>
-<div class="tabela">
-    <div class="tabela-linha tabela-cabecalho">
-        <div class="tabela-celula">De</div>
-        <div class="tabela-celula" style="flex-grow:4">Mensagem</div>
-        <div class="tabela-celula tabela-celula-estreita"></div>
-    </div>
-    @forelse ($mensagens as $m)
-        <div class="tabela-linha {{ $m->lida ? '' : 'bg-yellow-50' }}">
-            <div class="tabela-celula">{{ $m->nome }}<br><span class="text-xs text-zinc-500">{{ $m->email }}</span></div>
-            <div class="tabela-celula" style="flex-grow:4"><strong>{{ $m->assunto }}</strong><br>{{ $m->mensagem }}</div>
-            <div class="tabela-celula tabela-celula-estreita">
-                @unless ($m->lida)
-                    <form method="POST" action="{{ route('admin.mensagens.ler', $m) }}">@csrf<button class="text-blue-800 hover:underline">Marcar lida</button></form>
-                @endunless
-            </div>
-        </div>
-    @empty
-        <div class="tabela-linha"><div class="tabela-celula">Sem mensagens.</div></div>
-    @endforelse
+@php $porLer = $mensagens->where('lida', false)->count(); @endphp
+<div class="admin-cabecalho">
+    <div><h1>Mensagens de contacto</h1><p>Mensagens enviadas pelo formulário de Contactos do portal.</p></div>
 </div>
+
+<div class="admin-stats">
+    <div class="admin-stat {{ $porLer ? 'destaque' : '' }}"><span>Por ler</span><strong>{{ $porLer }}</strong></div>
+    <div class="admin-stat"><span>Total</span><strong>{{ $mensagens->count() }}</strong></div>
+</div>
+
+@if ($mensagens->isEmpty())
+    <div class="admin-vazio"><strong>Sem mensagens</strong>As mensagens enviadas pelos visitantes aparecem aqui.</div>
+@else
+<div class="admin-ferramentas">
+    <span class="admin-nota" style="margin:0" data-filtro-conta>{{ $mensagens->count() }} mensagens</span>
+    <label class="admin-pesquisa">Procurar <input type="search" data-filtro="#tabela-mensagens" placeholder="Nome, email, assunto…"></label>
+</div>
+<table class="admin-tabela" id="tabela-mensagens">
+    <thead><tr><th>De</th><th>Mensagem</th><th>Recebida</th><th>Estado</th></tr></thead>
+    <tbody>
+        @foreach ($mensagens as $m)
+            <tr class="{{ $m->lida ? '' : 'destaque' }}">
+                <td><strong>{{ $m->nome }}</strong><small><a href="mailto:{{ $m->email }}" class="admin-ligacao" style="font-weight:400">{{ $m->email }}</a></small></td>
+                <td><strong>{{ $m->assunto ?: 'Sem assunto' }}</strong><div class="admin-mensagem" style="font-weight:400">{{ $m->mensagem }}</div></td>
+                <td style="font-weight:400;white-space:nowrap">{{ $m->created_at?->format('d/m/Y H:i') }}</td>
+                <td>
+                    @if ($m->lida)
+                        <span class="admin-estado neutro">Lida</span>
+                    @else
+                        <span class="admin-estado alerta">Por ler</span>
+                        <form method="POST" action="{{ route('admin.mensagens.ler', $m) }}" style="margin-top:.4rem">@csrf<button class="admin-ligacao">Marcar como lida</button></form>
+                    @endif
+                </td>
+            </tr>
+        @endforeach
+    </tbody>
+</table>
+@endif
 @endsection
