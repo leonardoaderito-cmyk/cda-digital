@@ -3,7 +3,7 @@
 @section('conteudo')
 <div class="admin-cabecalho">
     <div><h1>Newsletter</h1><p>{{ $subscricoes->total() }} contactos registados pelo formulário do portal.</p></div>
-    <div class="admin-cabecalho-accoes"><a href="{{ route('admin.newsletter.exportar') }}" class="admin-botao">Exportar CSV</a></div>
+    <div class="admin-cabecalho-accoes"><a href="{{ route('admin.newsletter.exportar') }}" class="admin-botao admin-botao-secundario"><x-icone nome="download" /> Exportar CSV</a></div>
 </div>
 
 @if ($subscricoes->isEmpty())

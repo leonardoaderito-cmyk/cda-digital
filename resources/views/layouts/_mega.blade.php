@@ -8,18 +8,18 @@
             'principal' => ['Quem somos', route('instituicao')],
             'colunas' => [
                 'Instituição' => [['Quem somos', route('instituicao')], ['História', route('historia')], ['Órgãos sociais', route('orgaos')]],
-                'Enquadramento' => [['Estatutos', route('estatutos')], ['Parceiros e links', route('parceiros')]],
+                'Enquadramento' => [['Estatutos', route('estatutos')], ['Parceiros e ligações', route('parceiros')]],
             ],
             'atalho' => ['Fale com a CDA', 'Sede em Maputo e delegações em Nampula e na Beira.', 'Contactos', route('contactos')],
         ],
         'Documentação' => [
-            'rotas' => ['documentos', 'documento.*'],
+            'rotas' => ['documentos', 'documento.*', 'revista', 'revista.*'],
             'resumo' => 'Legislação, circulares e formulários oficiais num só lugar.',
             'principal' => ['Todos os documentos', route('documentos')],
             'colunas' => [
                 'Legislação' => [['Leis', route('documentos', ['tipo' => 'Lei'])], ['Decretos', route('documentos', ['tipo' => 'Decreto'])], ['Regulamentos', route('documentos', ['tipo' => 'Regulamento'])], ['Estatutos', route('documentos', ['tipo' => 'Estatuto'])]],
                 'Comunicação oficial' => [['Circulares', route('documentos', ['tipo' => 'Circular'])], ['Comunicados', route('documentos', ['tipo' => 'Comunicado'])], ['Convocatórias', route('documentos', ['tipo' => 'Convocatória'])], ['Ordens de serviço', route('documentos', ['tipo' => 'Ordem de Serviço'])]],
-                'Publicações' => [['Relatórios', route('documentos', ['tipo' => 'Relatório'])], ['Boletins', route('documentos', ['tipo' => 'Boletim'])]],
+                'Publicações' => [['Relatórios', route('documentos', ['tipo' => 'Relatório'])], ['Boletins', route('documentos', ['tipo' => 'Boletim'])], ['Revista O Despachante', route('revista')]],
             ],
             'pesquisa' => true,
         ],
@@ -28,22 +28,28 @@
             'resumo' => 'Acompanhe a vida da Câmara e do sector aduaneiro.',
             'principal' => ['Todas as notícias', route('noticias')],
             'colunas' => [
-                'Actualidade' => [['Últimas notícias', route('noticias')], ['Actividades e agenda', route('actividades')]],
+                'Actualidade' => [['Últimas notícias', route('noticias')], ['Actividades', route('actividades')]],
                 'Agenda' => [['Eventos', route('eventos')]],
             ],
             'atalho' => ['Newsletter CDA', 'Receba notícias, circulares e comunicados no seu email.', 'Subscrever', route('inicio').'#newsletter-email'],
         ],
         'Membros' => [
             'rotas' => ['directorio', 'login', 'registo', 'membro.*'],
-            'resumo' => 'Directório público e área reservada aos despachantes.',
-            'principal' => ['Procurar despachante', route('directorio')],
-            'colunas' => [
-                'Directório' => [['Procurar despachante', route('directorio')]],
-                'Área reservada' => [['Quotas e requerimentos', route('membro.area')], ['Criar conta', route('registo')]],
-            ],
+            'resumo' => 'Área reservada aos despachantes e directório público.',
+            'principal' => ['Área do membro', route('membro.area')],
+            // Com sessao: a conta do membro; sem sessao: como entrar. Os servicos aparecem sempre.
+            'colunas' => auth()->check()
+                ? [
+                    'A minha conta' => [['Resumo', route('membro.area')], ['Os meus dados', route('membro.dados')], ['Segurança', route('membro.seguranca')]],
+                    'Serviços' => [['Quotas e pagamentos', route('membro.quotas')], ['Requerimentos', route('membro.requerimentos')], ['Documentos', route('membro.documentos')]],
+                ]
+                : [
+                    'Acesso' => [['Entrar', route('login')], ['Criar conta', route('registo')], ['Recuperar a senha', route('password.request')]],
+                    'Serviços' => [['Quotas e pagamentos', route('membro.quotas')], ['Requerimentos', route('membro.requerimentos')], ['Documentos', route('membro.documentos')]],
+                ],
             'atalho' => auth()->check()
-                ? ['Área do membro', 'Consulte as suas quotas e submeta requerimentos.', 'Abrir a minha área', route('membro.area')]
-                : ['Já é membro?', 'Entre com o email ou o número de carteira.', 'Entrar', route('login')],
+                ? ['Cartão de membro', 'Mostre o seu cartão digital com código de verificação.', 'Ver o cartão', route('membro.cartao')]
+                : ['Procura um despachante?', 'Consulte o directório público dos despachantes registados.', 'Abrir o directório', route('directorio')],
         ],
     ];
 
@@ -88,16 +94,18 @@
                             <p>{{ $g['resumo'] }}</p>
                             <a href="{{ $g['principal'][1] }}" class="mega-intro-botao">{{ $g['principal'][0] }} &rarr;</a>
                         </div>
-                        @foreach ($g['colunas'] as $cabecalho => $ligacoes)
-                            <div class="mega-coluna">
-                                <h3>{{ $cabecalho }}</h3>
-                                <ul>
-                                    @foreach ($ligacoes as [$rotulo, $url])
-                                        <li><a href="{{ $url }}">{{ $rotulo }}</a></li>
-                                    @endforeach
-                                </ul>
-                            </div>
-                        @endforeach
+                        <div class="mega-colunas">
+                            @foreach ($g['colunas'] as $cabecalho => $ligacoes)
+                                <div class="mega-coluna">
+                                    <h3>{{ $cabecalho }}</h3>
+                                    <ul>
+                                        @foreach ($ligacoes as [$rotulo, $url])
+                                            <li><a href="{{ $url }}">{{ $rotulo }}</a></li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endforeach
+                        </div>
                         @if (! empty($g['pesquisa']) || ! empty($g['atalho']))
                         <div class="mega-atalho">
                             @if (! empty($g['pesquisa']))

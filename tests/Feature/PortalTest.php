@@ -13,12 +13,16 @@ use App\Models\Slide;
 use App\Models\User;
 use App\Notifications\CredenciaisIniciais;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 // Autor: Leonardo (leonardoaderito-cmyk)
@@ -539,7 +543,7 @@ class PortalTest extends TestCase
         ]);
 
         $this->actingAs($membro)->get('/membro/declaracao-quitacao')
-            ->assertOk()->assertSee('Certificado de Quitação')->assertSee('CDA-CQ-'.now()->year)->assertSee('data:image/png;base64,', false);
+            ->assertOk()->assertSee('Declaração de Quitação')->assertSee('CDA-CQ-'.now()->year)->assertSee('data:image/png;base64,', false);
         $pdf = $this->actingAs($membro)->get('/membro/declaracao-quitacao/descarregar');
         $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $pdf->getContent());
@@ -552,5 +556,125 @@ class PortalTest extends TestCase
         $quota->update(['estado' => 'em_atraso', 'data_pagamento' => null]);
         $this->get($url)->assertOk()->assertSee('Situação não regularizada');
         $this->actingAs($membro)->get('/membro/declaracao-quitacao')->assertForbidden();
+    }
+
+    public function test_extracto_mostra_debitos_creditos_e_saldo(): void
+    {
+        $membro = User::factory()->create(['carteira' => '555111', 'ativo' => true]);
+        $outro = User::factory()->create(['carteira' => '555222', 'ativo' => true]);
+        Quota::create(['user_id' => $membro->id, 'ano' => now()->year - 1, 'valor' => 6000, 'estado' => 'paga', 'referencia' => 'REF-PAGA', 'data_pagamento' => now()->subYear()->endOfYear()]);
+        Quota::create(['user_id' => $membro->id, 'ano' => now()->year, 'valor' => 7500, 'estado' => 'pendente']);
+        Quota::create(['user_id' => $outro->id, 'ano' => now()->year, 'valor' => 9999, 'estado' => 'pendente']);
+
+        $this->actingAs($membro)->get('/membro/extracto')
+            ->assertOk()
+            ->assertSee('Extracto de conta')
+            ->assertSeeInOrder(['Quota anual de '.(now()->year - 1), 'Pagamento da quota de '.(now()->year - 1), 'Quota anual de '.now()->year])
+            ->assertSee('REF-PAGA')
+            ->assertSee('13.500 MT')
+            ->assertSee('7.500 MT')
+            ->assertDontSee('9.999');
+
+        $this->actingAs($membro)->get('/membro/extracto/documento')
+            ->assertOk()->assertSee('Extracto de Conta Corrente')->assertSee('CDA-EX-');
+        $pdf = $this->actingAs($membro)->get('/membro/extracto/descarregar');
+        $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+
+        $this->actingAs($membro)->get('/membro/documentos')->assertOk()->assertSee('Declaração de quitação')->assertSee('Extracto de conta');
+    }
+
+    public function test_tesouraria_consulta_extracto_e_filtra_quotas(): void
+    {
+        $membro = User::factory()->create(['carteira' => '555333', 'ativo' => true]);
+        Quota::create(['user_id' => $membro->id, 'ano' => now()->year, 'valor' => 4200, 'estado' => 'em_atraso']);
+        $financeiro = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'financeiro']);
+        $editor = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'editor']);
+
+        $this->actingAs($financeiro)->get('/admin/quotas')
+            ->assertOk()
+            ->assertSee('data-separadores="#tabela-quotas"', false)
+            ->assertSee('data-grupo="em_atraso"', false)
+            ->assertSee(route('admin.membros.extracto', $membro), false);
+
+        $this->actingAs($financeiro)->get('/admin/membros/'.$membro->id.'/extracto')
+            ->assertOk()->assertSee('Extracto de Conta Corrente')->assertSee('4.200')->assertSee(route('admin.membros.extracto', [$membro, 'pdf' => 1]), false);
+        $this->actingAs($financeiro)->get('/admin/membros/'.$membro->id.'/extracto?pdf=1')
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->actingAs($editor)->get('/admin/membros/'.$membro->id.'/extracto')->assertForbidden();
+        $this->actingAs($financeiro)->get('/admin/membros/'.$financeiro->id.'/extracto')->assertNotFound();
+    }
+
+    public function test_painel_e_listas_da_administracao_organizados(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin']);
+        $editor = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'editor']);
+        $proximo = new Evento(['titulo' => 'Seminário que vem', 'slug' => 'seminario-que-vem', 'data_evento' => now()->addMonth(), 'activo' => true]);
+        $proximo->forceFill(['blocos' => []])->save();
+        $passado = new Evento(['titulo' => 'Encontro passado', 'slug' => 'encontro-passado', 'data_evento' => now()->subMonth(), 'activo' => true]);
+        $passado->forceFill(['blocos' => []])->save();
+        Quota::create(['user_id' => User::factory()->create(['ativo' => true])->id, 'ano' => now()->year, 'valor' => 5000, 'estado' => 'paga', 'data_pagamento' => now()]);
+
+        $this->actingAs($admin)->get('/admin')->assertOk()
+            ->assertSee('Por tratar')->assertSee('Quotas de '.now()->year)->assertSee('1 de 1')->assertSee('Criar')->assertSee('Num relance');
+        // O editor so ve o que pode gerir: sem tarefas de membros nem quotas
+        $this->actingAs($editor)->get('/admin')->assertOk()
+            ->assertSee('Notícias recentes')->assertDontSee('Quotas de '.now()->year)->assertDontSee('Contas por aprovar');
+
+        $this->actingAs($admin)->get('/admin/eventos')->assertOk()
+            ->assertSee('data-separadores="#tabela-eventos"', false)
+            ->assertSee('data-grupo="proximo"', false)
+            ->assertSee('data-grupo="passado"', false);
+        $this->actingAs($admin)->get('/admin/noticias')->assertOk()->assertSee('Ainda não há notícias');
+    }
+
+    public function test_copia_de_seguranca_inclui_base_e_ficheiros_e_apaga_antigas(): void
+    {
+        $pasta = storage_path('framework/testing/copias-'.uniqid());
+        $ficheiros = storage_path('framework/testing/carregados-'.uniqid());
+        File::ensureDirectoryExists($ficheiros.'/sub');
+        File::put($ficheiros.'/sub/talao.pdf', 'conteudo');
+        File::ensureDirectoryExists($pasta);
+        File::put($pasta.'/cda-digital-2000-01-01-000000.zip', 'antiga');
+        config(['cda.copias.pasta' => $pasta, 'cda.copias.manter' => 1, 'cda.copias.pastas' => ['teste' => $ficheiros]]);
+        // VACUUM INTO nao corre dentro de transaccao; a de RefreshDatabase e reaberta no fim (nada e escrito)
+        DB::commit();
+
+        try {
+            $this->artisan('cda:copia-seguranca')->assertSuccessful();
+
+            $copias = File::glob($pasta.'/cda-digital-*.zip');
+            $this->assertCount(1, $copias);
+            $this->assertStringNotContainsString('2000-01-01', $copias[0]);
+
+            $zip = new \ZipArchive;
+            $this->assertTrue($zip->open($copias[0]));
+            $this->assertNotFalse($zip->locateName('database/database.sqlite'));
+            $this->assertNotFalse($zip->locateName('LEIA-ME.txt'));
+            $prefixo = Str::after(str_replace('\\', '/', $ficheiros), str_replace('\\', '/', base_path()).'/');
+            $this->assertNotFalse($zip->locateName($prefixo.'/sub/talao.pdf'));
+            $base = $zip->getFromName('database/database.sqlite');
+            $zip->close();
+            $this->assertStringStartsWith('SQLite format 3', $base);
+            $this->assertStringContainsString('CREATE TABLE "quotas"', $base);
+        } finally {
+            DB::beginTransaction();
+            File::deleteDirectory($pasta);
+            File::deleteDirectory($ficheiros);
+        }
+    }
+
+    public function test_proxies_de_confianca_detectam_https(): void
+    {
+        $pedido = fn () => $this->withHeaders(['X-Forwarded-Proto' => 'https', 'X-Forwarded-Port' => '443'])->get('/');
+
+        $pedido()->assertOk()->assertHeaderMissing('Strict-Transport-Security');
+
+        TrustProxies::at('*');
+        try {
+            $pedido()->assertOk()->assertHeader('Strict-Transport-Security');
+        } finally {
+            TrustProxies::flushState();
+        }
     }
 }

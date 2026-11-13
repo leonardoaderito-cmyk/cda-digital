@@ -6,6 +6,4 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable(['ficheiro', 'titulo', 'tipo', 'entidade', 'ano', 'categoria', 'status'])]
-class Documento extends Model
-{
-}
+class Documento extends Model {}

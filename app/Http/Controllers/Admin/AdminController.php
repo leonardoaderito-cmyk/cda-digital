@@ -30,7 +30,17 @@ class AdminController extends Controller
 {
     public function painel()
     {
+        $quotasDoAno = Quota::where('ano', now()->year)->get(['estado', 'valor']);
+
         return view('admin.painel', [
+            'taloes' => Quota::where('talao_estado', 'em_validacao')->count(),
+            'membrosActivos' => User::where('is_admin', false)->where('ativo', true)->count(),
+            'quotasAno' => [
+                'total' => $quotasDoAno->count(),
+                'pagas' => $quotasDoAno->whereIn('estado', ['paga', 'isenta'])->count(),
+                'recebido' => $quotasDoAno->where('estado', 'paga')->sum('valor'),
+                'porReceber' => $quotasDoAno->whereIn('estado', ['pendente', 'em_atraso'])->sum('valor'),
+            ],
             'pendentes' => User::where('ativo', false)->where('is_admin', false)->count(),
             'requerimentos' => Requerimento::where('estado', 'em_analise')->count(),
             'mensagens' => ContactoMensagem::where('lida', false)->count(),

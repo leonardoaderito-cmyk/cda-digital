@@ -12,13 +12,24 @@
 {{-- Autor: Leonardo (leonardoaderito-cmyk) - area do membro: usa a mesma estrutura visual da administracao --}}
 @php
     $eu = auth()->user();
+    // Grupos do menu: [rota, rotulo, icone, rotas que tambem o marcam como activo]
     $menu = [
-        ['membro.area', 'Resumo', 'dashboard'],
-        ['membro.quotas', 'Quotas e pagamentos', 'payments'],
-        ['membro.documentos', 'Documentos', 'description'],
-        ['membro.requerimentos', 'Requerimentos', 'assignment'],
-        ['membro.dados', 'Os meus dados', 'person'],
-        ['membro.seguranca', 'Segurança', 'lock'],
+        'Geral' => [
+            ['membro.area', 'Resumo', 'dashboard', []],
+        ],
+        'Situação financeira' => [
+            ['membro.quotas', 'Quotas e pagamentos', 'payments', ['membro.comprovativo*']],
+            ['membro.extracto', 'Extracto de conta', 'receipt_long', ['membro.extracto.*']],
+        ],
+        'Documentos e serviços' => array_values(array_filter([
+            ['membro.documentos', 'Declarações', 'workspace_premium', ['membro.declaracao*']],
+            $eu->carteira && ! $eu->is_admin ? ['membro.cartao', 'Cartão de membro', 'badge', []] : null,
+            ['membro.requerimentos', 'Requerimentos', 'assignment', []],
+        ])),
+        'A minha conta' => [
+            ['membro.dados', 'Os meus dados', 'person', []],
+            ['membro.seguranca', 'Segurança', 'lock', []],
+        ],
     ];
 @endphp
 <body class="admin membro antialiased">
@@ -37,20 +48,22 @@
 
 <div class="admin-corpo">
     <nav id="admin-lateral" class="admin-lateral" aria-label="Área do Membro">
-        <div class="admin-lateral-grupo"><span>A minha conta</span></div>
-        <ul>
-            @foreach ($menu as [$rota, $rotulo, $icone])
-                @php $activo = request()->routeIs($rota); @endphp
-                <li class="{{ $activo ? 'activo' : '' }}">
-                    <div class="admin-item-linha">
-                        <a href="{{ route($rota) }}" title="{{ $rotulo }}" @if ($activo) aria-current="page" @endif>
-                            <x-icone :nome="$icone" :cheio="$activo" />
-                            <span>{{ $rotulo }}</span>
-                        </a>
-                    </div>
-                </li>
-            @endforeach
-        </ul>
+        @foreach ($menu as $grupo => $itens)
+            <div class="admin-lateral-grupo"><span>{{ $grupo }}</span></div>
+            <ul>
+                @foreach ($itens as [$rota, $rotulo, $icone, $outras])
+                    @php $activo = request()->routeIs($rota, ...$outras); @endphp
+                    <li class="{{ $activo ? 'activo' : '' }}">
+                        <div class="admin-item-linha">
+                            <a href="{{ route($rota) }}" title="{{ $rotulo }}" @if ($activo) aria-current="page" @endif>
+                                <x-icone :nome="$icone" :cheio="$activo" />
+                                <span>{{ $rotulo }}</span>
+                            </a>
+                        </div>
+                    </li>
+                @endforeach
+            </ul>
+        @endforeach
         <div class="admin-lateral-grupo"><span>Portal</span></div>
         <ul>
             @if (\App\Models\Pagina::estaActiva('documentos'))

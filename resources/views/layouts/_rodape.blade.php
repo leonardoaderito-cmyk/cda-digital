@@ -34,6 +34,7 @@
                 @if (\App\Models\Pagina::estaActiva('documentos'))<li><a href="{{ route('documentos', ['tipo' => 'Comunicado']) }}">Comunicados</a></li>@endif
                 @if (\App\Models\Pagina::estaActiva('documentos'))<li><a href="{{ route('documentos', ['tipo' => 'Relatório']) }}">Relatórios</a></li>@endif
                 @if (\App\Models\Pagina::estaActiva('documentos'))<li><a href="{{ route('documentos') }}">Todos os documentos</a></li>@endif
+                @if (\App\Models\Pagina::estaActiva('revista'))<li><a href="{{ route('revista') }}">Revista O Despachante</a></li>@endif
             </ul>
         </div>
 

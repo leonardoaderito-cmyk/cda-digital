@@ -19,11 +19,16 @@
 @if ($requerimentos->isEmpty())
     <div class="admin-vazio"><strong>Sem requerimentos</strong>Quando um membro submeter um pedido, aparece aqui.</div>
 @else
-<table class="admin-tabela">
+@include('admin._separadores', ['tabela' => '#tabela-requerimentos', 'separadores' => ['' => ['Todos', $requerimentos->count()]] + collect($estados)->map(fn ($rotulo, $valor) => [$rotulo, $requerimentos->where('estado', $valor)->count()])->all()])
+<div class="admin-ferramentas">
+    <span class="admin-nota" style="margin:0" data-filtro-conta>{{ $requerimentos->count() }} requerimentos</span>
+    <label class="admin-pesquisa">Procurar <input type="search" data-filtro="#tabela-requerimentos" placeholder="Membro, número, tipo de pedido…"></label>
+</div>
+<table class="admin-tabela" id="tabela-requerimentos">
     <thead><tr><th>Membro</th><th>Pedido</th><th>Estado</th><th>Resposta</th></tr></thead>
     <tbody>
         @foreach ($requerimentos as $r)
-            <tr class="{{ $r->estado === 'em_analise' ? 'destaque' : '' }}">
+            <tr class="{{ $r->estado === 'em_analise' ? 'destaque' : '' }}" data-grupo="{{ $r->estado }}">
                 <td><strong>{{ $r->user->name }}</strong><small>N.º {{ $r->user->carteira ?: '—' }}</small><small>{{ $r->created_at?->format('d/m/Y H:i') }}</small></td>
                 <td><strong>{{ $r->tipo }}</strong><div class="admin-mensagem" style="font-weight:400">{{ $r->descricao }}</div></td>
                 <td><span class="admin-estado {{ $cores[$r->estado] ?? 'neutro' }}">{{ $estados[$r->estado] ?? $r->estado }}</span></td>

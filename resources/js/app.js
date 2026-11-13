@@ -1,4 +1,7 @@
 // Autor: Leonardo (leonardoaderito-cmyk) - interaccoes da pagina inicial
+import './assistente';
+import './videos';
+import './publicidades';
 
 // Carrossel de destaques com rotacao automatica
 document.querySelectorAll('[data-carrossel]').forEach((el) => {
@@ -582,22 +585,48 @@ document.querySelectorAll('[data-destaque]').forEach((caixa) => {
     });
 });
 
-// Administracao: procura rapida nas tabelas (filtra as linhas pelo texto escrito)
-document.querySelectorAll('[data-filtro]').forEach((campo) => {
-    const tabela = document.querySelector(campo.dataset.filtro);
-    if (!tabela) return;
-    const linhas = [...tabela.querySelectorAll('tbody tr')];
-    const conta = campo.closest('.admin-ferramentas')?.querySelector('[data-filtro-conta]');
-    const rotulo = conta?.textContent.replace(/^\d+\s*/, '') ?? '';
-    const normalizar = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    campo.addEventListener('input', () => {
-        const termo = normalizar(campo.value.trim());
-        let visiveis = 0;
-        linhas.forEach((linha) => {
-            const mostra = !termo || normalizar(linha.textContent).includes(termo);
-            linha.hidden = !mostra;
-            if (mostra) visiveis++;
-        });
-        if (conta) conta.textContent = termo ? `${visiveis} de ${linhas.length} ${rotulo}` : `${linhas.length} ${rotulo}`;
+// Administracao: procura rapida e separadores por estado nas tabelas.
+// <input data-filtro="#tabela"> filtra pelo texto; <div data-separadores="#tabela"> com botoes data-valor
+// mostra so as linhas cujo data-grupo (valores separados por espaco) inclui esse valor. Os dois filtros somam-se.
+const normalizarFiltro = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const filtrosTabela = new Map();
+const estadoFiltro = (seletor) => {
+    if (!filtrosTabela.has(seletor)) {
+        const tabela = document.querySelector(seletor);
+        const conta = document.querySelector(`[data-filtro-conta="${seletor}"]`)
+            ?? document.querySelector(`[data-filtro="${seletor}"]`)?.closest('.admin-ferramentas')?.querySelector('[data-filtro-conta]');
+        filtrosTabela.set(seletor, { tabela, conta, rotulo: conta?.textContent.replace(/^\d+\s*/, '') ?? '', termo: '', grupo: '' });
+    }
+    return filtrosTabela.get(seletor);
+};
+const filtrarTabela = (seletor) => {
+    const f = estadoFiltro(seletor);
+    if (!f.tabela) return;
+    const linhas = [...f.tabela.querySelectorAll('tbody tr')];
+    let visiveis = 0;
+    linhas.forEach((linha) => {
+        const mostra = (!f.termo || normalizarFiltro(linha.textContent).includes(f.termo))
+            && (!f.grupo || (linha.dataset.grupo ?? '').split(' ').includes(f.grupo));
+        linha.hidden = !mostra;
+        if (mostra) visiveis++;
     });
+    if (f.conta) f.conta.textContent = visiveis === linhas.length ? `${linhas.length} ${f.rotulo}` : `${visiveis} de ${linhas.length} ${f.rotulo}`;
+};
+document.querySelectorAll('[data-filtro]').forEach((campo) => {
+    const seletor = campo.dataset.filtro;
+    if (!document.querySelector(seletor)) return;
+    campo.addEventListener('input', () => {
+        estadoFiltro(seletor).termo = normalizarFiltro(campo.value.trim());
+        filtrarTabela(seletor);
+    });
+});
+document.querySelectorAll('[data-separadores]').forEach((grupo) => {
+    const seletor = grupo.dataset.separadores;
+    if (!document.querySelector(seletor)) return;
+    const botoes = [...grupo.querySelectorAll('button[data-valor]')];
+    botoes.forEach((botao) => botao.addEventListener('click', () => {
+        botoes.forEach((b) => b.setAttribute('aria-pressed', String(b === botao)));
+        estadoFiltro(seletor).grupo = botao.dataset.valor;
+        filtrarTabela(seletor);
+    }));
 });

@@ -2,17 +2,21 @@
 @section('titulo', 'Páginas')
 @section('conteudo')
 <div class="admin-cabecalho">
-    <h1>Páginas</h1>
-    <a href="{{ route('admin.paginas.nova') }}" class="admin-botao">Adicionar nova</a>
+    <div><h1>Páginas</h1><p>Secções do portal e páginas de texto. Desactive uma página para a retirar dos menus e do portal.</p></div>
+    <div class="admin-cabecalho-accoes"><a href="{{ route('admin.paginas.nova') }}" class="admin-botao"><x-icone nome="add" /> Nova página</a></div>
 </div>
 
 <ul class="admin-filtros">
-    <li><a href="{{ route('admin.paginas') }}" class="{{ $filtro ? '' : 'activo' }}">Todas <span>({{ $totais['todas'] }})</span></a></li>
-    <li><a href="{{ route('admin.paginas', ['estado' => 'activas']) }}" class="{{ $filtro === 'activas' ? 'activo' : '' }}">Activas <span>({{ $totais['activas'] }})</span></a></li>
-    <li><a href="{{ route('admin.paginas', ['estado' => 'inactivas']) }}" class="{{ $filtro === 'inactivas' ? 'activo' : '' }}">Desactivadas <span>({{ $totais['inactivas'] }})</span></a></li>
+    <li><a href="{{ route('admin.paginas') }}" class="{{ $filtro ? '' : 'activo' }}">Todas <span>{{ $totais['todas'] }}</span></a></li>
+    <li><a href="{{ route('admin.paginas', ['estado' => 'activas']) }}" class="{{ $filtro === 'activas' ? 'activo' : '' }}">Activas <span>{{ $totais['activas'] }}</span></a></li>
+    <li><a href="{{ route('admin.paginas', ['estado' => 'inactivas']) }}" class="{{ $filtro === 'inactivas' ? 'activo' : '' }}">Desactivadas <span>{{ $totais['inactivas'] }}</span></a></li>
 </ul>
 
-<table class="admin-tabela">
+<div class="admin-ferramentas">
+    <span class="admin-nota" style="margin:0" data-filtro-conta>{{ $paginas->count() }} páginas</span>
+    <label class="admin-pesquisa">Procurar <input type="search" data-filtro="#tabela-paginas" placeholder="Título ou endereço…"></label>
+</div>
+<table class="admin-tabela" id="tabela-paginas">
     <thead>
         <tr><th>Título</th><th>Tipo</th><th>Endereço</th><th>Estado</th><th>Alterada</th></tr>
     </thead>

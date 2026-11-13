@@ -2,7 +2,7 @@
 @section('titulo', $evento->titulo)
 @section('conteudo')
 <article class="max-w-3xl mx-auto bg-white border border-zinc-200 rounded-lg overflow-hidden">
-    @if ($evento->imagem)<img src="{{ asset($evento->imagem) }}" alt="" class="w-full max-h-96 object-cover">@endif
+    @if ($evento->imagem)<img src="{{ asset($evento->imagem) }}" alt="" class="artigo-imagem">@endif
     <div class="p-6 flex flex-col gap-4">
         <div class="text-sm text-zinc-500">{{ $evento->data_evento?->format('d/m/Y') }}@if ($evento->local) &middot; {{ $evento->local }}@endif</div>
         <h1 class="text-3xl font-semibold">{{ $evento->titulo }}</h1>

@@ -19,10 +19,11 @@ php artisan serve
 - [x] Eventos: publicação por blocos, agenda pública e gestão administrativa
 - [x] Newsletter: subscrição pública, gestão e exportação CSV no painel
 - [x] Segurança: cabeçalhos HTTP, auditoria de acções de admin e logins, sessão cifrada
-- [ ] Segurança: 2FA para administradores, cópias de segurança
-- [ ] Fase 5: assistente de IA, CI e deploy
+- [x] Cópias de segurança diárias (`php artisan cda:copia-seguranca`), CI no GitHub Actions e script de deploy
+- [ ] Segurança: 2FA para administradores
+- [x] Fase 5: Assistente CDA (pesquisa nos documentos e respostas com IA limitadas ao conteúdo do site)
 
-Em produção: `APP_ENV=production`, `APP_DEBUG=false`, `SESSION_SECURE_COOKIE=true` e HTTPS.
+Produção em `https://cda.bhub360.app`: ver [docs/producao.md](docs/producao.md) e `.env.production.example`.
 
 O código anterior (site estático + API Python) está em `legado/` como referência e fonte de dados.
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Auditoria;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -30,7 +31,8 @@ class LoginController extends Controller
             : User::where('email', Str::lower($id))->first();
 
         if (! $utilizador || ! Hash::check($dados['password'], $utilizador->password)) {
-            \App\Models\Auditoria::registar('login.falhou', Str::limit($id, 60));
+            Auditoria::registar('login.falhou', Str::limit($id, 60));
+
             return back()->withInput($request->only('identificador'))
                 ->withErrors(['identificador' => 'Email/carteira ou senha incorrectos.']);
         }
@@ -42,7 +44,7 @@ class LoginController extends Controller
         Auth::login($utilizador);
         $request->session()->regenerate();
         $utilizador->forceFill(['ultimo_login' => now()])->save();
-        \App\Models\Auditoria::registar('login.ok', null, $utilizador->id);
+        Auditoria::registar('login.ok', null, $utilizador->id);
 
         return redirect()->intended($utilizador->is_admin ? route('admin.painel') : route('membro.area'));
     }

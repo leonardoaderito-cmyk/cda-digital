@@ -39,6 +39,17 @@
 @if ($membros->isEmpty())
     <div class="admin-vazio"><strong>Ainda não há contas de membros</strong>Crie o primeiro acesso a partir da lista da CDA.</div>
 @else
+@php
+    $separadores = [
+        '' => ['Todas', $membros->count()],
+        'aprovar' => ['Por aprovar', $membros->where('ativo', false)->count()],
+        'regular' => ['Regularizadas', $regulares->count()],
+        'irregular' => ['Não regularizadas', $membros->count() - $regulares->count()],
+        'semsenha' => ['Sem senha', $membros->whereNull('senha_definida_em')->count()],
+    ];
+    $verFinancas = auth()->user()->pode('financeiro.ver');
+@endphp
+@include('admin._separadores', ['tabela' => '#tabela-membros', 'separadores' => $separadores])
 <div class="admin-ferramentas">
     <span class="admin-nota" style="margin:0" data-filtro-conta>{{ $membros->count() }} contas</span>
     <label class="admin-pesquisa">Procurar <input type="search" data-filtro="#tabela-membros" placeholder="Nome, número, email…"></label>
@@ -47,7 +58,7 @@
     <thead><tr><th>Membro</th><th>Contacto</th><th>Conta</th><th>Credenciais</th><th>Situação financeira</th></tr></thead>
     <tbody>
         @foreach ($membros as $m)
-            <tr class="{{ $m->ativo ? '' : 'destaque' }}">
+            <tr class="{{ $m->ativo ? '' : 'destaque' }}" data-grupo="{{ $m->ativo ? '' : 'aprovar' }} {{ isset($regulares[$m->id]) ? 'regular' : 'irregular' }} {{ $m->senha_definida_em ? '' : 'semsenha' }}">
                 <td>
                     <strong>{{ $m->name }}</strong>
                     <small>N.º {{ $m->carteira ?: '—' }} &middot; {{ $m->entidade ?: 'Sem entidade' }}</small>
@@ -72,7 +83,7 @@
                         <span class="admin-estado neutro">Sem convite</span>
                     @endif
                 </td>
-                <td><span class="admin-estado {{ isset($regulares[$m->id]) ? 'ligado' : 'alerta' }}">{{ isset($regulares[$m->id]) ? 'Regularizada' : 'Não regularizada' }}</span></td>
+                <td><span class="admin-estado {{ isset($regulares[$m->id]) ? 'ligado' : 'alerta' }}">{{ isset($regulares[$m->id]) ? 'Regularizada' : 'Não regularizada' }}</span>@if ($verFinancas)<a href="{{ route('admin.membros.extracto', $m) }}" target="_blank" rel="noopener" class="admin-ligacao admin-ligacao-pequena">Ver extracto</a>@endif</td>
             </tr>
         @endforeach
     </tbody>

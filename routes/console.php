@@ -3,6 +3,7 @@
 use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Str;
 
 // Autor: Leonardo (leonardoaderito-cmyk) - cria ou promove uma conta de administrador e define a senha
@@ -51,6 +52,34 @@ Artisan::command('cda:admin {email} {--nome=}', function () {
     return 0;
 })->purpose('Cria ou promove uma conta de administrador e define a senha');
 
+// Leonardo (leonardoaderito-cmyk): conta de administrador inicial do pacote para alojamento partilhado.
+// Entra com o utilizador e a senha indicados e e obrigada a definir email e senha pessoais no primeiro acesso.
+Artisan::command('cda:admin-inicial {utilizador=admin} {senha=admin}', function () {
+    $utilizador = Str::lower(trim($this->argument('utilizador')));
+    if (User::where('email', $utilizador)->exists()) {
+        $this->info("A conta {$utilizador} ja existe: nada foi alterado.");
+
+        return 0;
+    }
+
+    $conta = new User;
+    $conta->forceFill([
+        'name' => 'Administrador',
+        'email' => $utilizador,
+        'password' => $this->argument('senha'),
+        'is_admin' => true,
+        'ativo' => true,
+        'nivel_acesso' => 'super_admin',
+        'trocar_senha' => true,
+    ])->save();
+    $this->info("Conta inicial criada: {$utilizador} (senha provisoria, a trocar no primeiro acesso).");
+
+    return 0;
+})->purpose('Cria a conta de administrador inicial com senha provisoria');
+
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+// Leonardo (leonardoaderito-cmyk): copia de seguranca diaria (precisa do cron "php artisan schedule:run" a cada minuto)
+Schedule::command('cda:copia-seguranca')->dailyAt('02:00');

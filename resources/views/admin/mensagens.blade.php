@@ -14,6 +14,7 @@
 @if ($mensagens->isEmpty())
     <div class="admin-vazio"><strong>Sem mensagens</strong>As mensagens enviadas pelos visitantes aparecem aqui.</div>
 @else
+@include('admin._separadores', ['tabela' => '#tabela-mensagens', 'separadores' => ['' => ['Todas', $mensagens->count()], 'nova' => ['Por ler', $porLer], 'lida' => ['Lidas', $mensagens->count() - $porLer]]])
 <div class="admin-ferramentas">
     <span class="admin-nota" style="margin:0" data-filtro-conta>{{ $mensagens->count() }} mensagens</span>
     <label class="admin-pesquisa">Procurar <input type="search" data-filtro="#tabela-mensagens" placeholder="Nome, email, assunto…"></label>
@@ -22,7 +23,7 @@
     <thead><tr><th>De</th><th>Mensagem</th><th>Recebida</th><th>Estado</th></tr></thead>
     <tbody>
         @foreach ($mensagens as $m)
-            <tr class="{{ $m->lida ? '' : 'destaque' }}">
+            <tr class="{{ $m->lida ? '' : 'destaque' }}" data-grupo="{{ $m->lida ? 'lida' : 'nova' }}">
                 <td><strong>{{ $m->nome }}</strong><small><a href="mailto:{{ $m->email }}" class="admin-ligacao" style="font-weight:400">{{ $m->email }}</a></small></td>
                 <td><strong>{{ $m->assunto ?: 'Sem assunto' }}</strong><div class="admin-mensagem" style="font-weight:400">{{ $m->mensagem }}</div></td>
                 <td style="font-weight:400;white-space:nowrap">{{ $m->created_at?->format('d/m/Y H:i') }}</td>

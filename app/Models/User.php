@@ -87,6 +87,7 @@ class User extends Authenticatable
             'ultimo_login' => 'datetime',
             'credenciais_enviadas_em' => 'datetime',
             'senha_definida_em' => 'datetime',
+            'trocar_senha' => 'boolean',
         ];
     }
 }

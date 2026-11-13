@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Auditoria;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -21,7 +22,7 @@ class ApenasAdmin
             $alvos = collect($request->route()->parameters())
                 ->map(fn ($p) => is_object($p) ? class_basename($p).'#'.$p->getKey() : $p)
                 ->implode(',');
-            \App\Models\Auditoria::registar($request->route()->getName(), $alvos ?: null);
+            Auditoria::registar($request->route()->getName(), $alvos ?: null);
         }
 
         return $resposta;

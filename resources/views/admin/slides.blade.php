@@ -1,19 +1,20 @@
 @extends('layouts.admin')
 @section('titulo', 'Carrossel')
 @section('conteudo')
-<div class="admin-cabecalho">
-    <h1>Carrossel da página inicial</h1>
-    <a href="{{ route('admin.slides.novo') }}" class="admin-botao">Adicionar slide</a>
-</div>
-
 @php $activos = $slides->where('activo', true)->count(); @endphp
-<p class="admin-nota" style="margin:0 0 1rem">
-    @if ($activos)
-        O carrossel mostra os <strong>{{ $activos }}</strong> slides activos, pela ordem desta lista.
-    @else
-        Não há slides activos, por isso o carrossel mostra automaticamente as <strong>4 notícias mais recentes</strong>.
-    @endif
-</p>
+<div class="admin-cabecalho">
+    <div>
+        <h1>Carrossel da página inicial</h1>
+        <p>
+            @if ($activos)
+                O carrossel mostra os {{ $activos }} slides activos, pela ordem desta lista.
+            @else
+                Não há slides activos, por isso o carrossel mostra automaticamente as 4 notícias mais recentes.
+            @endif
+        </p>
+    </div>
+    <div class="admin-cabecalho-accoes"><a href="{{ route('admin.slides.novo') }}" class="admin-botao"><x-icone nome="add" /> Novo slide</a></div>
+</div>
 
 <table class="admin-tabela">
     <thead>

@@ -11,9 +11,11 @@ use App\Models\Quota;
 use App\Models\User;
 use App\Services\PdfService;
 use App\Services\QrCodeService;
+use App\Support\Selo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
@@ -187,31 +189,12 @@ class MembroController extends Controller
 
     public function comprovativo(Request $request, Quota $quota, QrCodeService $qrCode)
     {
-        abort_unless($quota->user_id === $request->user()->id || $request->user()->pode('financeiro.ver'), 403);
-        abort_unless($quota->estado === 'paga', 404);
-
-        return view('membro.comprovativo', [
-            'quota' => $quota->load('user'),
-            'codigo' => sprintf('CDA-Q%06d-%d', $quota->id, $quota->ano),
-            'qrCode' => $qrCode->dataUri($this->urlVerificacao($quota->user, $quota->ano)),
-            'logo' => $this->logoDataUri(),
-            'pdf' => false,
-        ]);
+        return view('membro.comprovativo', $this->dadosComprovativo($request, $quota, $qrCode) + ['pdf' => false]);
     }
 
     public function descarregarComprovativo(Request $request, Quota $quota, QrCodeService $qrCode, PdfService $pdf): Response
     {
-        abort_unless($quota->user_id === $request->user()->id || $request->user()->pode('financeiro.ver'), 403);
-        abort_unless($quota->estado === 'paga', 404);
-        $quota->load('user');
-        $codigo = sprintf('CDA-Q%06d-%d', $quota->id, $quota->ano);
-        $html = view('membro.comprovativo', [
-            'quota' => $quota,
-            'codigo' => $codigo,
-            'qrCode' => $qrCode->dataUri($this->urlVerificacao($quota->user, $quota->ano)),
-            'logo' => $this->logoDataUri(),
-            'pdf' => true,
-        ])->render();
+        $html = view('membro.comprovativo', $this->dadosComprovativo($request, $quota, $qrCode) + ['pdf' => true])->render();
 
         return $pdf->descarregar($html, 'comprovativo-'.$quota->ano.'-'.$quota->user->carteira.'.pdf');
     }
@@ -229,8 +212,46 @@ class MembroController extends Controller
         $membro = $request->user();
         abort_unless(! $membro->is_admin && $membro->estaRegular(), 403);
         $html = view('membro.declaracao', $this->dadosDeclaracao($membro, $qrCode) + ['pdf' => true])->render();
+        Auditoria::registar('membro.declaracao.emitida', $this->codigoCertificado($membro, now()->year));
 
-        return $pdf->descarregar($html, 'certificado-quitacao-'.$membro->carteira.'-'.now()->year.'.pdf');
+        return $pdf->descarregar($html, 'declaracao-quitacao-'.$membro->carteira.'-'.now()->year.'.pdf');
+    }
+
+    /** Extracto de conta corrente: quotas lancadas a debito, pagamentos e isencoes a credito, com o saldo em cada linha. */
+    public function extracto(Request $request)
+    {
+        $membro = $request->user();
+
+        return view('membro.extracto', $this->contexto($membro) + $this->movimentos($membro));
+    }
+
+    public function verExtracto(Request $request, QrCodeService $qrCode)
+    {
+        return view('membro.extracto-documento', $this->dadosExtracto($request->user(), $qrCode) + ['pdf' => false]);
+    }
+
+    public function descarregarExtracto(Request $request, QrCodeService $qrCode, PdfService $pdf): Response
+    {
+        $membro = $request->user();
+        $html = view('membro.extracto-documento', $this->dadosExtracto($membro, $qrCode) + ['pdf' => true])->render();
+
+        return $pdf->descarregar($html, 'extracto-'.($membro->carteira ?: $membro->id).'-'.now()->format('Ymd').'.pdf');
+    }
+
+    /** A tesouraria consulta (ou descarrega com ?pdf=1) o extracto de um membro. */
+    public function extractoMembro(Request $request, User $user, QrCodeService $qrCode, PdfService $pdf)
+    {
+        abort_if($user->is_admin, 404);
+        $dados = $this->dadosExtracto($user, $qrCode);
+        if ($request->boolean('pdf')) {
+            return $pdf->descarregar(view('membro.extracto-documento', $dados + ['pdf' => true])->render(), 'extracto-'.($user->carteira ?: $user->id).'-'.now()->format('Ymd').'.pdf');
+        }
+
+        return view('membro.extracto-documento', $dados + [
+            'pdf' => false,
+            'urlPdf' => route('admin.membros.extracto', [$user, 'pdf' => 1]),
+            'urlVoltar' => route('admin.quotas'),
+        ]);
     }
 
     public function verificarRegularidade(Request $request, User $user)
@@ -273,6 +294,7 @@ class MembroController extends Controller
     {
         $ano = now()->year;
         $urlVerificacao = $this->urlVerificacao($membro, $ano);
+        $quotas = $membro->quotas()->where('ano', '<=', $ano)->orderByDesc('ano')->get();
 
         return [
             'membro' => $membro,
@@ -280,11 +302,82 @@ class MembroController extends Controller
             'codigo' => $this->codigoCertificado($membro, $ano),
             'qrCode' => $qrCode->dataUri($urlVerificacao),
             'urlVerificacao' => $urlVerificacao,
-            'quotas' => $membro->quotas()->where('ano', '<=', $ano)->orderByDesc('ano')->get(),
+            'quotas' => $quotas,
+            'totalPago' => $quotas->where('estado', 'paga')->sum('valor'),
             'entidade' => $membro->entidade ?: MembroPublico::where('n_carta', $membro->carteira)->value('empresa'),
             'emitidoEm' => now(),
+            'dataExtenso' => $this->dataPorExtenso(now()),
+            'logo' => $this->logoDataUri(),
+            'selo' => Selo::dataUri('Quitação', (string) $ano),
+        ];
+    }
+
+    private function dadosComprovativo(Request $request, Quota $quota, QrCodeService $qrCode): array
+    {
+        abort_unless($quota->user_id === $request->user()->id || $request->user()->pode('financeiro.ver'), 403);
+        abort_unless($quota->estado === 'paga', 404);
+        $quota->load('user');
+
+        return [
+            'quota' => $quota,
+            'codigo' => sprintf('CDA-Q%06d-%d', $quota->id, $quota->ano),
+            'qrCode' => $qrCode->dataUri($this->urlVerificacao($quota->user, $quota->ano)),
+            'dataExtenso' => $this->dataPorExtenso($quota->data_pagamento ?? now()),
+            'logo' => $this->logoDataUri(),
+            'selo' => Selo::dataUri('Pago', (string) $quota->ano),
+        ];
+    }
+
+    private function dadosExtracto(User $membro, QrCodeService $qrCode): array
+    {
+        $dados = $this->movimentos($membro);
+        $anos = $dados['quotas']->pluck('ano');
+
+        return $dados + [
+            'membro' => $membro,
+            'codigo' => sprintf('CDA-EX-%s-%06d', now()->format('Ymd'), $membro->id),
+            'periodo' => $anos->isEmpty() ? null : ($anos->min() === $anos->max() ? (string) $anos->min() : $anos->min().' a '.$anos->max()),
+            'emValidacao' => $dados['quotas']->where('talao_estado', 'em_validacao')->count(),
+            'qrCode' => $qrCode->dataUri($this->urlVerificacao($membro, now()->year)),
             'logo' => $this->logoDataUri(),
         ];
+    }
+
+    /** Linhas do extracto (por ordem de data), com o saldo acumulado, e os totais. */
+    private function movimentos(User $membro): array
+    {
+        $quotas = $membro->quotas()->orderBy('ano')->get();
+        $linhas = collect();
+        foreach ($quotas as $q) {
+            $lancada = Carbon::create($q->ano, 1, 1);
+            $linhas->push(['data' => $lancada, 'ordem' => 0, 'descricao' => 'Quota anual de '.$q->ano, 'referencia' => sprintf('Q%06d', $q->id), 'debito' => $q->valor, 'credito' => 0]);
+            if ($q->estado === 'paga') {
+                $linhas->push(['data' => $q->data_pagamento ?? $lancada, 'ordem' => 1, 'descricao' => 'Pagamento da quota de '.$q->ano, 'referencia' => $q->referencia, 'debito' => 0, 'credito' => $q->valor]);
+            } elseif ($q->estado === 'isenta') {
+                $linhas->push(['data' => $lancada, 'ordem' => 1, 'descricao' => 'Isenção da quota de '.$q->ano, 'referencia' => null, 'debito' => 0, 'credito' => $q->valor]);
+            }
+        }
+
+        $saldo = 0;
+        $movimentos = $linhas->sortBy([fn ($a, $b) => $a['data'] <=> $b['data'], fn ($a, $b) => $a['ordem'] <=> $b['ordem']])->values()
+            ->map(function ($m) use (&$saldo) {
+                $saldo += $m['debito'] - $m['credito'];
+
+                return $m + ['saldo' => $saldo];
+            });
+
+        return [
+            'quotas' => $quotas,
+            'movimentos' => $movimentos,
+            'totais' => ['debito' => $linhas->sum('debito'), 'credito' => $linhas->sum('credito'), 'saldo' => $saldo],
+        ];
+    }
+
+    private function dataPorExtenso(\DateTimeInterface $data): string
+    {
+        $meses = [1 => 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+        return $data->format('j').' de '.$meses[(int) $data->format('n')].' de '.$data->format('Y');
     }
 
     private function urlVerificacao(User $membro, int $ano): string

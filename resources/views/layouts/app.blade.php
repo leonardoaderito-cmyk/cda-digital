@@ -15,34 +15,39 @@
 <body class="antialiased min-h-screen flex flex-col">
 <header id="topo">
     <div class="barra-topo">
-        <div class="max-w-6xl mx-auto px-4 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <span><a href="tel:+25821305504">+258 21 305 504</a> &middot; Maputo, Moçambique</span>
-            <div class="flex items-center gap-4">
+        <div class="max-w-6xl mx-auto px-4 barra-topo-conteudo">
+            <ul class="barra-topo-contactos">
+                <li><x-icone nome="call" /><a href="tel:+25821305504">+258 21 305 504</a></li>
+                <li class="barra-topo-local"><x-icone nome="location_on" /><span>Maputo, Moçambique</span></li>
+            </ul>
+            <div class="barra-topo-conta">
                 @auth
                     @if (auth()->user()->is_admin)
-                        <a href="{{ route('admin.painel') }}">Administração</a>
+                        <a href="{{ route('admin.painel') }}" class="barra-topo-ligacao"><x-icone nome="admin_panel_settings" /><span>Administração</span></a>
                     @endif
-                    <a href="{{ route('membro.area') }}">{{ auth()->user()->name }}</a>
+                    <a href="{{ route('membro.area') }}" class="barra-topo-ligacao" title="Área do membro"><x-icone nome="account_circle" /><span class="barra-topo-nome">{{ auth()->user()->name }}</span></a>
                     <form method="POST" action="{{ route('logout') }}">@csrf
-                        <button class="botao-topo">Sair</button>
+                        <button class="barra-topo-sair" title="Terminar sessão"><x-icone nome="logout" /><span>Sair</span></button>
                     </form>
                 @else
-                    <a href="{{ route('login') }}">Entrar</a>
-                    <a href="{{ route('registo') }}" class="botao-topo">Registar</a>
+                    <a href="{{ route('login') }}" class="barra-topo-ligacao"><x-icone nome="login" /><span>Entrar</span></a>
+                    <a href="{{ route('registo') }}" class="botao-topo"><x-icone nome="person_add" /><span>Registar</span></a>
                 @endauth
             </div>
         </div>
     </div>
     <div class="cabecalho">
-        <div class="max-w-6xl mx-auto px-4 py-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-            <a href="{{ route('inicio') }}" class="flex items-center gap-2.5">
-                <img src="{{ asset('img/cda-logo.jpg') }}" alt="Logotipo da CDA" class="h-12 w-12 object-contain">
-                <span class="cabecalho-nome">Câmara dos Despachantes<br>Aduaneiros de Moçambique
+        <div class="max-w-6xl mx-auto px-4 cabecalho-conteudo">
+            <a href="{{ route('inicio') }}" class="cabecalho-marca">
+                <img src="{{ asset('img/cda-logo.jpg') }}" alt="Logotipo da CDA" class="cabecalho-logo">
+                <span class="cabecalho-texto">
+                    <span class="cabecalho-nome">Câmara dos Despachantes<br>Aduaneiros de Moçambique</span>
                     <span class="cabecalho-lema">&ldquo;Por uma câmara coesa, interventiva e próspera&rdquo;</span>
                 </span>
             </a>
             <form method="GET" action="{{ route('documentos') }}" class="pesquisa" role="search">
                 <label class="sr-only" for="pesquisa-topo">Pesquisar documentos</label>
+                <x-icone nome="search" class="pesquisa-icone" />
                 <input id="pesquisa-topo" type="search" name="q" placeholder="Pesquisar documentos">
                 <button>Procurar</button>
             </form>
@@ -68,6 +73,7 @@
 </main>
 
 @include('layouts._rodape')
+@include('layouts._assistente')
 @include('layouts._cookies')
 </body>
 </html>

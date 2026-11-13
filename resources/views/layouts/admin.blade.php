@@ -32,6 +32,10 @@
             ['admin.noticias', 'Notícias', 'newspaper', 'admin.noticias.nova', 'conteudo.gerir'],
             ['admin.eventos', 'Eventos', 'event', 'admin.eventos.novo', 'conteudo.gerir'],
             ['admin.slides', 'Carrossel', 'view_carousel', 'admin.slides.novo', 'conteudo.gerir'],
+            ['admin.revistas', 'Revista', 'auto_stories', 'admin.revistas.nova', 'conteudo.gerir'],
+            ['admin.videos', 'Vídeos', 'smart_display', 'admin.videos.novo', 'conteudo.gerir'],
+            ['admin.parceiros', 'Parceiros', 'handshake', 'admin.parceiros.novo', 'conteudo.gerir'],
+            ['admin.publicidades', 'Publicidade', 'campaign', 'admin.publicidades.novo', 'conteudo.gerir'],
         ],
         'Ficheiros' => [
             ['admin.imagens', 'Imagens', 'photo_library', null, 'conteudo.gerir'],
@@ -45,6 +49,7 @@
         'Comunicação' => [
             ['admin.mensagens', 'Mensagens', 'mail', null, 'comunicacao.gerir'],
             ['admin.newsletter', 'Newsletter', 'campaign', null, 'comunicacao.gerir'],
+            ['admin.assistente', 'Assistente CDA', 'forum', null, 'conteudo.gerir'],
         ],
         'Sistema' => [
             ['admin.utilizadores', 'Utilizadores e acessos', 'admin_panel_settings', null, 'utilizadores.gerir'],

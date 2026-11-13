@@ -2,7 +2,11 @@
 @section('titulo', 'Documentos')
 @section('conteudo')
 <h1 class="text-2xl font-semibold mb-4">Centro documental</h1>
+@if ($grupo)
+    <p class="mb-4">A mostrar <strong>{{ $grupo['nome'] }}</strong> ({{ $grupo['descricao'] }}). <a href="{{ route('documentos') }}" class="text-cda-vermelho underline">Ver todos os documentos</a></p>
+@endif
 <form method="GET" class="flex flex-wrap gap-3 mb-4">
+    @if ($grupo)<input type="hidden" name="grupo" value="{{ request('grupo') }}">@endif
     <input name="q" value="{{ request('q') }}" placeholder="Pesquisar título" class="flex-1 min-w-48 border border-zinc-300 rounded px-3 py-2">
     <select name="tipo" class="border border-zinc-300 rounded px-3 py-2">
         <option value="">Todos os tipos</option>

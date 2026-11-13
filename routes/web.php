@@ -1,20 +1,27 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\AssistenteController as AdminAssistenteController;
 use App\Http\Controllers\Admin\EventoController;
 use App\Http\Controllers\Admin\ImagemController;
 use App\Http\Controllers\Admin\PaginaController as AdminPaginaController;
+use App\Http\Controllers\Admin\ParceiroController;
+use App\Http\Controllers\Admin\PublicidadeController;
+use App\Http\Controllers\Admin\RevistaController;
 use App\Http\Controllers\Admin\SlideController;
+use App\Http\Controllers\Admin\VideoController;
+use App\Http\Controllers\AssistenteController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegistoController;
 use App\Http\Controllers\Auth\SenhaController;
+use App\Http\Controllers\Auth\TrocarSenhaController;
 use App\Http\Controllers\MembroController;
 use App\Http\Controllers\PaginaController;
 use App\Http\Controllers\PublicoController;
 use Illuminate\Support\Facades\Route;
 
 // Paginas de conteudo com endereco proprio; o texto e gerido em Administracao > Paginas
-foreach (['instituicao', 'historia', 'orgaos', 'estatutos', 'parceiros', 'cookies'] as $pagina) {
+foreach (['instituicao', 'historia', 'orgaos', 'estatutos', 'cookies'] as $pagina) {
     Route::get('/'.$pagina, [PaginaController::class, 'mostrar'])->name($pagina);
 }
 Route::get('/pagina/{slug}', [PaginaController::class, 'mostrar'])->name('pagina');
@@ -39,6 +46,11 @@ Route::controller(PublicoController::class)->group(function () {
         Route::get('/documentos', 'documentos')->name('documentos');
         Route::get('/documentos/{documento}/abrir', 'documento')->name('documento.abrir');
     });
+    Route::middleware('pagina:revista')->group(function () {
+        Route::get('/revista', 'revista')->name('revista');
+        Route::get('/revista/{revista}/pdf', 'abrirRevista')->name('revista.abrir');
+    });
+    Route::get('/parceiros', 'parceiros')->middleware('pagina:parceiros')->name('parceiros');
     Route::get('/membros', 'directorio')->middleware('pagina:directorio')->name('directorio');
     Route::middleware('pagina:contactos')->group(function () {
         Route::get('/contactos', 'contactos')->name('contactos');
@@ -59,8 +71,13 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('/sair', [LoginController::class, 'destroy'])->name('logout');
+    Route::get('/nova-senha', [TrocarSenhaController::class, 'editar'])->name('senha.trocar');
+    Route::post('/nova-senha', [TrocarSenhaController::class, 'actualizar'])->middleware('throttle:10,1')->name('senha.trocar.guardar');
     Route::get('/membro', [MembroController::class, 'area'])->name('membro.area');
     Route::get('/membro/quotas', [MembroController::class, 'quotas'])->name('membro.quotas');
+    Route::get('/membro/extracto', [MembroController::class, 'extracto'])->name('membro.extracto');
+    Route::get('/membro/extracto/documento', [MembroController::class, 'verExtracto'])->name('membro.extracto.ver');
+    Route::get('/membro/extracto/descarregar', [MembroController::class, 'descarregarExtracto'])->name('membro.extracto.descarregar');
     Route::post('/membro/quotas/{quota}/talao', [MembroController::class, 'enviarTalao'])->middleware('throttle:10,10')->name('membro.talao.enviar');
     Route::get('/membro/quotas/{quota}/talao', [MembroController::class, 'talao'])->name('membro.talao');
     Route::get('/membro/documentos', [MembroController::class, 'documentos'])->name('membro.documentos');
@@ -112,6 +129,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->controlle
     Route::post('/newsletter/{newsletterSubscricao}/alternar', 'alternarNewsletter')->middleware('permissao:comunicacao.gerir')->name('newsletter.alternar');
 });
 
+Route::get('/admin/membros/{user}/extracto', [MembroController::class, 'extractoMembro'])->middleware(['auth', 'admin', 'permissao:financeiro.ver'])->name('admin.membros.extracto');
+
 Route::prefix('admin/eventos')->name('admin.eventos')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(EventoController::class)->group(function () {
     Route::get('/', 'index')->name('');
     Route::get('/novo', 'create')->name('.novo');
@@ -144,9 +163,59 @@ Route::prefix('admin/carrossel')->name('admin.slides')->middleware(['auth', 'adm
     Route::delete('/{slide}', 'destroy')->name('.apagar');
 });
 
+Route::prefix('admin/revista')->name('admin.revistas')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(RevistaController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::get('/nova', 'create')->name('.nova');
+    Route::post('/', 'store')->name('.guardar');
+    Route::get('/{revista}/editar', 'edit')->name('.editar');
+    Route::post('/{revista}', 'update')->name('.actualizar');
+    Route::post('/{revista}/alternar', 'alternar')->name('.alternar');
+    Route::delete('/{revista}', 'destroy')->name('.apagar');
+});
+
+Route::prefix('admin/parceiros')->name('admin.parceiros')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(ParceiroController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::get('/novo', 'create')->name('.novo');
+    Route::post('/', 'store')->name('.guardar');
+    Route::get('/{parceiro}/editar', 'edit')->name('.editar');
+    Route::post('/{parceiro}', 'update')->name('.actualizar');
+    Route::post('/{parceiro}/alternar', 'alternar')->name('.alternar');
+    Route::post('/{parceiro}/mover', 'mover')->name('.mover');
+    Route::delete('/{parceiro}', 'destroy')->name('.apagar');
+});
+
+Route::prefix('admin/videos')->name('admin.videos')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(VideoController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::get('/novo', 'create')->name('.novo');
+    Route::post('/', 'store')->name('.guardar');
+    Route::get('/{video}/editar', 'edit')->name('.editar');
+    Route::post('/{video}', 'update')->name('.actualizar');
+    Route::post('/{video}/alternar', 'alternar')->name('.alternar');
+    Route::post('/{video}/mover', 'mover')->name('.mover');
+    Route::delete('/{video}', 'destroy')->name('.apagar');
+});
+
+Route::prefix('admin/publicidade')->name('admin.publicidades')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(PublicidadeController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::get('/novo', 'create')->name('.novo');
+    Route::post('/', 'store')->name('.guardar');
+    Route::get('/{publicidade}/editar', 'edit')->name('.editar');
+    Route::post('/{publicidade}', 'update')->name('.actualizar');
+    Route::post('/{publicidade}/alternar', 'alternar')->name('.alternar');
+    Route::post('/{publicidade}/mover', 'mover')->name('.mover');
+    Route::delete('/{publicidade}', 'destroy')->name('.apagar');
+});
+
 Route::prefix('admin/imagens')->name('admin.imagens')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(ImagemController::class)->group(function () {
     Route::get('/', 'index')->name('');
     Route::post('/', 'store')->name('.guardar');
     Route::post('/{imagem}', 'update')->name('.actualizar');
     Route::delete('/{imagem}', 'destroy')->name('.apagar');
+});
+
+// Leonardo (leonardoaderito-cmyk): Assistente CDA (janela de conversa no site e gestao do indice)
+Route::post('/assistente', [AssistenteController::class, 'perguntar'])->middleware('throttle:assistente')->name('assistente.perguntar');
+Route::prefix('admin/assistente')->name('admin.assistente')->middleware(['auth', 'admin', 'permissao:conteudo.gerir'])->controller(AdminAssistenteController::class)->group(function () {
+    Route::get('/', 'index')->name('');
+    Route::post('/indexar', 'indexar')->name('.indexar');
 });

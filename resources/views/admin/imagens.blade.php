@@ -1,7 +1,9 @@
 @extends('layouts.admin')
 @section('titulo', 'Imagens')
 @section('conteudo')
-<div class="admin-cabecalho"><h1>Biblioteca de imagens</h1></div>
+<div class="admin-cabecalho">
+    <div><h1>Biblioteca de imagens</h1><p>Imagens para as páginas, notícias, eventos e carrossel. Clique numa imagem para editar o nome, o texto alternativo ou copiar o endereço.</p></div>
+</div>
 
 <form method="POST" action="{{ route('admin.imagens.guardar') }}" enctype="multipart/form-data" class="admin-caixa admin-carregar" data-upload-imagens data-max-ficheiro="5242880" data-max-total="104857600">
     @csrf
