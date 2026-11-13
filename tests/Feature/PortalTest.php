@@ -1,0 +1,680 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Evento;
+use App\Models\Imagem;
+use App\Models\MembroPublico;
+use App\Models\NewsletterSubscricao;
+use App\Models\Noticia;
+use App\Models\Pagina;
+use App\Models\Quota;
+use App\Models\Slide;
+use App\Models\User;
+use App\Notifications\CredenciaisIniciais;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+// Autor: Leonardo (leonardoaderito-cmyk)
+class PortalTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_paginas_publicas_respondem(): void
+    {
+        foreach (['/', '/noticias', '/eventos', '/actividades', '/documentos', '/membros', '/contactos', '/entrar', '/registar', '/instituicao', '/historia', '/orgaos', '/estatutos', '/parceiros'] as $url) {
+            $this->get($url)->assertOk();
+        }
+    }
+
+    public function test_flash_de_noticias_mostra_imagem_data_e_resumo(): void
+    {
+        $noticia = Noticia::create([
+            'titulo' => 'Nova medida aduaneira',
+            'slug' => 'nova-medida-aduaneira',
+            'categoria' => 'Actualidade',
+            'data' => '2026-11-12',
+            'resumo' => 'Informação importante para os despachantes aduaneiros.',
+            'texto' => 'Informação importante para os despachantes aduaneiros.',
+            'imagem' => '/img/media/noticia-teste.jpg',
+            'publicada' => true,
+        ]);
+
+        $this->get('/')
+            ->assertOk()
+            ->assertSee('flash-cartao', false)
+            ->assertSee($noticia->imagem, false)
+            ->assertSee('12/11/2026')
+            ->assertSee('Informação importante para os despachantes aduaneiros.')
+            ->assertSee('Nov 26');
+    }
+
+    public function test_painel_admin_organiza_noticias_recentes_em_colunas(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+        Noticia::create([
+            'titulo' => 'Notícia alinhada no painel',
+            'slug' => 'noticia-alinhada-no-painel',
+            'categoria' => 'Institucional',
+            'data' => '2026-11-12',
+            'texto' => 'Conteúdo da notícia.',
+            'publicada' => true,
+        ]);
+
+        $this->actingAs($admin)->get('/admin')
+            ->assertOk()
+            ->assertSee('admin-noticias-recentes', false)
+            ->assertSee('Notícia alinhada no painel')
+            ->assertSee('Publicada');
+    }
+
+    public function test_area_de_administracao_bloqueia_nao_admin(): void
+    {
+        $this->get('/admin')->assertRedirect();
+
+        $membro = User::factory()->create(['is_admin' => false]);
+        $this->actingAs($membro)->get('/admin')->assertForbidden();
+    }
+
+    public function test_biblioteca_aceita_seis_imagens_num_so_envio(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+        $ficheiros = collect(range(1, 6))
+            ->map(fn (int $numero) => UploadedFile::fake()->image("imagem-$numero.jpg", 80, 80))
+            ->all();
+
+        try {
+            $this->actingAs($admin)->post('/admin/imagens', ['ficheiros' => $ficheiros])
+                ->assertRedirect()
+                ->assertSessionHas('estado', '6 imagens adicionadas.');
+            $this->assertDatabaseCount('imagens', 6);
+        } finally {
+            Imagem::all()->each(function (Imagem $imagem): void {
+                $imagem->apagarFicheiro();
+            });
+        }
+    }
+
+    public function test_membro_consulta_novas_paginas_e_envia_talao(): void
+    {
+        Storage::fake('local');
+        $membro = User::factory()->create();
+        $membro->forceFill(['is_admin' => false, 'ativo' => true, 'carteira' => '9001'])->save();
+        $quota = Quota::create([
+            'user_id' => $membro->id,
+            'ano' => now()->year,
+            'valor' => 5000,
+            'estado' => 'pendente',
+        ]);
+
+        foreach (['/membro', '/membro/quotas', '/membro/documentos', '/membro/cartao', '/membro/requerimentos', '/membro/dados', '/membro/seguranca'] as $url) {
+            $this->actingAs($membro)->get($url)->assertOk();
+        }
+
+        $this->actingAs($membro)->post("/membro/quotas/{$quota->id}/talao", [
+            'talao' => UploadedFile::fake()->image('talao.jpg', 120, 120),
+            'talao_data' => now()->toDateString(),
+            'talao_referencia' => 'TRX-9001',
+        ])->assertRedirect()->assertSessionHas('estado');
+
+        $quota->refresh();
+        $this->assertSame('em_validacao', $quota->talao_estado);
+        $this->assertSame('TRX-9001', $quota->talao_referencia);
+        Storage::disk('local')->assertExists($quota->talao);
+    }
+
+    public function test_gestor_financeiro_valida_talao_e_regulariza_quota(): void
+    {
+        Storage::fake('local');
+        $membro = User::factory()->create();
+        $membro->forceFill(['is_admin' => false, 'ativo' => true, 'carteira' => '9002'])->save();
+        $gestor = User::factory()->create();
+        $gestor->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'financeiro'])->save();
+        Storage::disk('local')->put('taloes/teste.jpg', 'imagem');
+        $quota = Quota::create([
+            'user_id' => $membro->id,
+            'ano' => now()->year,
+            'valor' => 5000,
+            'estado' => 'pendente',
+            'talao' => 'taloes/teste.jpg',
+            'talao_estado' => 'em_validacao',
+            'talao_referencia' => 'TRX-9002',
+            'talao_data' => now()->toDateString(),
+            'talao_enviado_em' => now(),
+        ]);
+
+        // O menu lateral mostra so o que o gestor financeiro pode abrir, com o talao por validar assinalado
+        $this->actingAs($gestor)->get('/admin')->assertOk()
+            ->assertSee('1 talão por validar', false)
+            ->assertSeeInOrder(['Painel', 'Membros', 'Quotas'])
+            ->assertDontSee('Site público')
+            ->assertDontSee('Utilizadores e acessos');
+
+        $this->actingAs($gestor)->post("/admin/quotas/{$quota->id}/talao", ['accao' => 'validar'])
+            ->assertRedirect()
+            ->assertSessionHas('estado');
+
+        $this->assertDatabaseHas('quotas', [
+            'id' => $quota->id,
+            'estado' => 'paga',
+            'referencia' => 'TRX-9002',
+            'talao_estado' => 'validado',
+        ]);
+        $this->assertDatabaseHas('auditoria', ['user_id' => $gestor->id, 'accao' => 'admin.talao.validado']);
+    }
+
+    public function test_cabecalhos_e_auditoria(): void
+    {
+        $this->get('/')->assertHeader('X-Frame-Options', 'DENY');
+
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'T', 'texto' => 'X', 'data' => '2026-01-01']);
+        $this->assertDatabaseHas('auditoria', ['accao' => 'admin.noticias.guardar', 'user_id' => $admin->id]);
+
+        // O administrador geral ve todos os grupos do menu, por ordem, e o atalho para adicionar noticias
+        $this->actingAs($admin)->get('/admin/noticias')
+            ->assertSeeInOrder(['Painel', 'Site público', 'Ficheiros', 'Membros', 'Comunicação', 'Sistema', 'Ver o site'])
+            ->assertSee('aria-label="Adicionar em Notícias"', false);
+    }
+
+    public function test_conta_inactiva_nao_entra(): void
+    {
+        $user = User::factory()->create(['email' => 'a@b.mz', 'password' => 'segredo123']);
+        $user->forceFill(['ativo' => false])->save();
+
+        $this->post('/entrar', ['identificador' => 'a@b.mz', 'password' => 'segredo123'])->assertSessionHasErrors();
+        $this->assertGuest();
+    }
+
+    public function test_visitante_pode_subscrever_newsletter_sem_duplicar_email(): void
+    {
+        $this->post('/newsletter', ['nome' => 'Ana', 'email' => 'ANA@example.com'])
+            ->assertSessionHas('estado');
+        $this->post('/newsletter', ['nome' => 'Ana Maria', 'email' => 'ana@example.com'])
+            ->assertSessionHas('estado');
+
+        $this->assertDatabaseCount('newsletter_subscricoes', 1);
+        $this->assertDatabaseHas('newsletter_subscricoes', [
+            'nome' => 'Ana Maria',
+            'email' => 'ana@example.com',
+            'activo' => true,
+        ]);
+    }
+
+    public function test_admin_cria_evento_e_visitante_ve_pagina_publicada(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+
+        $this->actingAs($admin)->post('/admin/eventos', [
+            'titulo' => 'Conferência Aduaneira',
+            'data_evento' => '2026-12-10',
+            'local' => 'Maputo',
+            'resumo' => 'Encontro anual do sector.',
+            'activo' => '1',
+            'blocos' => [
+                ['tipo' => 'texto', 'conteudo' => 'Programa completo do encontro.'],
+            ],
+        ])->assertRedirect();
+
+        $evento = Evento::firstOrFail();
+        $this->get('/eventos/'.$evento->slug)
+            ->assertOk()
+            ->assertSee('Conferência Aduaneira')
+            ->assertSee('Programa completo do encontro.');
+    }
+
+    private function admin(): User
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+
+        return $admin;
+    }
+
+    public function test_ecras_da_administracao_respondem(): void
+    {
+        $admin = $this->admin();
+        foreach (['/admin', '/admin/utilizadores', '/admin/paginas', '/admin/paginas/nova', '/admin/noticias', '/admin/noticias/nova', '/admin/eventos', '/admin/imagens', '/admin/documentos', '/admin/membros', '/admin/quotas', '/admin/requerimentos', '/admin/mensagens', '/admin/newsletter'] as $url) {
+            $this->actingAs($admin)->get($url)->assertOk();
+        }
+        foreach (Pagina::all() as $pagina) {
+            $this->actingAs($admin)->get('/admin/paginas/'.$pagina->id.'/editar')->assertOk();
+        }
+    }
+
+    public function test_admin_desactiva_seccao_e_pagina(): void
+    {
+        $admin = $this->admin();
+        $this->get('/')->assertSee('href="'.route('eventos').'"', false);
+
+        $this->actingAs($admin)->post('/admin/paginas/'.Pagina::where('slug', 'eventos')->value('id').'/alternar')->assertRedirect();
+        $this->actingAs($admin)->post('/admin/paginas/'.Pagina::where('slug', 'historia')->value('id').'/alternar')->assertRedirect();
+
+        $this->get('/eventos')->assertNotFound();
+        $this->get('/historia')->assertNotFound();
+        $this->get('/')->assertOk()
+            ->assertDontSee('href="'.route('eventos').'"', false)
+            ->assertDontSee('href="'.route('historia').'"', false);
+
+        $this->actingAs($admin)->post('/admin/paginas/'.Pagina::where('slug', 'eventos')->value('id').'/alternar');
+        $this->get('/eventos')->assertOk();
+    }
+
+    public function test_admin_edita_e_cria_paginas_com_html_limpo(): void
+    {
+        $admin = $this->admin();
+        $instituicao = Pagina::where('slug', 'instituicao')->firstOrFail();
+
+        $this->actingAs($admin)->post('/admin/paginas/'.$instituicao->id, [
+            'titulo' => 'A Câmara',
+            'resumo' => 'Resumo novo.',
+            'conteudo' => '<h2 class="texto-centro">Texto editado</h2><p onclick="alert(1)"><span class="texto-cor-vermelha">Olá</span></p><figure class="imagem-editor imagem-direita"><img src="/img/cda-logo.jpg" alt="CDA"><figcaption>Legenda</figcaption></figure><table class="tabela-editor"><tbody><tr><td>Valor</td></tr></tbody></table><figure class="video-incorporado"><a href="https://www.youtube.com/watch?v=abcdefghijk">Vídeo institucional</a></figure><script>alert(2)</script><a href="javascript:alert(3)">x</a>',
+            'activa' => '1',
+        ])->assertRedirect();
+
+        $this->get('/instituicao')->assertOk()
+            ->assertSee('A Câmara')->assertSee('Texto editado')
+            ->assertSee('texto-centro', false)->assertSee('texto-cor-vermelha', false)
+            ->assertSee('imagem-direita', false)->assertSee('tabela-editor', false)
+            ->assertSee('video-incorporado', false)
+            ->assertDontSee('alert(', false)->assertDontSee('onclick', false);
+
+        $this->actingAs($admin)->get('/admin/paginas/'.$instituicao->id.'/editar')
+            ->assertOk()->assertSee('data-alinhar="centro"', false)->assertSee('data-video', false)->assertSee('data-tabela="inserir"', false);
+
+        $this->actingAs($admin)->post('/admin/paginas', ['titulo' => 'Código de Ética', 'conteudo' => '<p>Deveres do despachante.</p>', 'activa' => '1', 'no_menu' => '1'])->assertRedirect();
+        $this->get('/pagina/codigo-de-etica')->assertOk()->assertSee('Deveres do despachante.');
+        $this->get('/')->assertSee('/pagina/codigo-de-etica', false);
+
+        // Uma seccao do portal nao pode ser removida, so desactivada
+        $this->actingAs($admin)->delete('/admin/paginas/'.Pagina::where('slug', 'noticias')->value('id'))->assertForbidden();
+    }
+
+    public function test_admin_carrega_imagem_e_usa_a_numa_noticia(): void
+    {
+        $admin = $this->admin();
+        $pasta = public_path(Imagem::PASTA);
+
+        $this->actingAs($admin)->post('/admin/imagens', ['ficheiros' => [UploadedFile::fake()->image('Sede da CDA.png', 640, 480)]])->assertRedirect();
+        $imagem = Imagem::firstOrFail();
+        $this->assertFileExists(public_path($imagem->ficheiro));
+        $this->assertSame(640, $imagem->largura);
+
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Nova sede', 'texto' => 'Texto.', 'data' => '2026-02-01', 'imagem_biblioteca' => $imagem->id])->assertRedirect();
+        $this->get('/')->assertSee($imagem->url(), false);
+
+        $this->actingAs($admin)->post('/admin/imagens', ['ficheiros' => [UploadedFile::fake()->create('virus.php', 10)]])->assertSessionHasErrors();
+
+        $this->actingAs($admin)->delete('/admin/imagens/'.$imagem->id)->assertRedirect();
+        $this->assertFileDoesNotExist($pasta.'/'.basename($imagem->ficheiro));
+    }
+
+    public function test_noticia_usa_o_editor_rico_com_varias_imagens(): void
+    {
+        $admin = $this->admin();
+
+        // O editor carrega varias imagens de uma vez e recebe-as em JSON
+        $resposta = $this->actingAs($admin)->postJson('/admin/imagens', ['ficheiros' => [
+            UploadedFile::fake()->image('foto-1.jpg', 400, 300),
+            UploadedFile::fake()->image('foto-2.jpg', 400, 300),
+        ]])->assertOk()->assertJsonCount(2, 'imagens');
+        [$a, $b] = array_column($resposta->json('imagens'), 'url');
+
+        $html = '<p>Abertura do <strong>ano aduaneiro</strong>.</p><div class="galeria-editor"><figure class="imagem-editor"><img src="'.$a.'" alt=""></figure><figure class="imagem-editor"><img src="'.$b.'" alt=""></figure></div><script>alert(1)</script>';
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Ano aduaneiro', 'texto' => $html, 'data' => '2026-04-01'])->assertRedirect();
+
+        $noticia = Noticia::where('slug', 'ano-aduaneiro')->firstOrFail();
+        $this->assertSame('Abertura do ano aduaneiro.', $noticia->resumo);
+        $this->assertStringNotContainsString('<script', $noticia->texto);
+        $this->actingAs($admin)->get('/admin/noticias/'.$noticia->id.'/editar')->assertOk()->assertSee('data-editor', false)->assertSee('galeria-editor', false);
+        $this->get('/noticias/ano-aduaneiro')->assertSee('<strong>ano aduaneiro</strong>', false)->assertSee($a, false)->assertSee($b, false);
+
+        // As noticias antigas, em texto simples, continuam com os paragrafos
+        $antiga = Noticia::create(['titulo' => 'Antiga', 'slug' => 'antiga', 'data' => '2025-01-01', 'texto' => "Direitos & deveres.\n\nSegundo.", 'publicada' => true]);
+        $this->get('/noticias/antiga')->assertSee('<p>Direitos &amp; deveres.</p>', false)->assertSee('<p>Segundo.</p>', false);
+
+        // Sem texto nao se guarda
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Vazia', 'texto' => '<p><br></p>', 'data' => '2026-04-01'])->assertSessionHasErrors('texto');
+    }
+
+    public function test_admin_configura_o_carrossel(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin)->get('/admin/carrossel')->assertOk();
+        $this->actingAs($admin)->get('/admin/carrossel/novo')->assertOk();
+
+        $this->actingAs($admin)->post('/admin/carrossel', ['titulo' => 'Bem-vindo à CDA', 'texto' => 'Portal oficial.', 'botao_texto' => 'Conhecer', 'botao_url' => '/instituicao', 'activo' => '1'])->assertRedirect();
+        $this->actingAs($admin)->post('/admin/carrossel', ['titulo' => 'Quotas 2026', 'activo' => '1'])->assertRedirect();
+        $this->actingAs($admin)->post('/admin/carrossel', ['titulo' => 'Perigoso', 'botao_url' => 'javascript:alert(1)'])->assertSessionHasErrors('botao_url');
+
+        [$primeiro, $segundo] = Slide::orderBy('ordem')->get()->all();
+        $this->actingAs($admin)->get('/admin/carrossel/'.$primeiro->id.'/editar')->assertOk();
+        $this->get('/')->assertSeeInOrder(['Bem-vindo à CDA', 'Quotas 2026'])->assertSee('href="/instituicao"', false);
+
+        $this->actingAs($admin)->post('/admin/carrossel/'.$segundo->id.'/mover', ['sentido' => 'subir'])->assertRedirect();
+        $this->get('/')->assertSeeInOrder(['Quotas 2026', 'Bem-vindo à CDA']);
+
+        $this->actingAs($admin)->post('/admin/carrossel/'.$primeiro->id.'/alternar');
+        $this->get('/')->assertDontSee('Bem-vindo à CDA')->assertSee('Quotas 2026');
+    }
+
+    public function test_carrossel_sem_slides_mostra_noticias_e_slide_pode_vir_de_noticia(): void
+    {
+        $admin = $this->admin();
+        $this->actingAs($admin)->post('/admin/noticias', ['titulo' => 'Assembleia Geral marcada', 'texto' => 'Convocatória publicada.', 'data' => '2026-03-01']);
+        $this->get('/')->assertSee('carrossel', false)->assertSee('Ler mais');
+
+        $this->actingAs($admin)->post('/admin/carrossel/da-noticia', ['noticia' => Noticia::firstOrFail()->id])->assertRedirect();
+        $this->assertDatabaseHas('slides', ['titulo' => 'Assembleia Geral marcada', 'botao_url' => '/noticias/assembleia-geral-marcada']);
+    }
+
+    public function test_aviso_e_politica_de_cookies(): void
+    {
+        $this->get('/')->assertSee('data-cookies', false)->assertSee('Só essenciais');
+        $this->get('/cookies')->assertOk()->assertSee('Política de cookies');
+    }
+
+    public function test_admin_pode_gerir_newsletter(): void
+    {
+        NewsletterSubscricao::create(['email' => 'membro@cda.mz']);
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin'])->save();
+
+        $this->actingAs($admin)->get('/admin/newsletter')->assertOk()->assertSee('membro@cda.mz');
+        $this->actingAs($admin)->get('/admin/newsletter/exportar')->assertOk();
+    }
+
+    public function test_admin_cria_conta_e_envia_primeiras_credenciais(): void
+    {
+        Notification::fake();
+        $admin = $this->admin();
+        $registo = MembroPublico::create([
+            'nome' => 'Amélia Matola',
+            'n_carta' => '123456',
+            'empresa' => 'Matola Despachos',
+            'activo' => true,
+        ]);
+
+        $this->actingAs($admin)->post('/admin/membros', [
+            'membro_publico_id' => $registo->id,
+            'email' => 'amelia@example.com',
+            'telefone' => '841234567',
+        ])->assertRedirect()->assertSessionHas('estado');
+
+        $membro = User::where('carteira', '123456')->firstOrFail();
+        $this->assertTrue($membro->ativo);
+        $this->assertNotNull($membro->credenciais_enviadas_em);
+        $this->assertDatabaseHas('quotas', ['user_id' => $membro->id, 'ano' => now()->year]);
+        Notification::assertSentTo($membro, CredenciaisIniciais::class);
+    }
+
+    public function test_membro_define_senha_e_entra_com_numero(): void
+    {
+        $membro = User::factory()->create([
+            'email' => 'membro@example.com',
+            'carteira' => '987654',
+            'ativo' => true,
+        ]);
+        $token = Password::broker()->createToken($membro);
+
+        $this->post('/definir-senha', [
+            'token' => $token,
+            'email' => $membro->email,
+            'password' => 'NovaSenha123',
+            'password_confirmation' => 'NovaSenha123',
+        ])->assertRedirect(route('login'));
+
+        $membro->refresh();
+        $this->assertTrue(Hash::check('NovaSenha123', $membro->password));
+        $this->assertNotNull($membro->senha_definida_em);
+        $this->post('/entrar', ['identificador' => '987654', 'password' => 'NovaSenha123'])
+            ->assertRedirect(route('membro.area'));
+    }
+
+    public function test_admin_lanca_quota_anual_para_todos_os_membros(): void
+    {
+        $admin = $this->admin();
+        $ano = now()->year;
+        $semQuota = User::factory()->create(['carteira' => '111111', 'ativo' => true]);
+        $aZero = User::factory()->create(['carteira' => '222222', 'ativo' => true]);
+        $jaPagou = User::factory()->create(['carteira' => '333333', 'ativo' => true]);
+        $inactivo = User::factory()->create(['carteira' => '444444', 'ativo' => false]);
+        Quota::create(['user_id' => $aZero->id, 'ano' => $ano, 'valor' => 0, 'estado' => 'pendente']);
+        Quota::create(['user_id' => $jaPagou->id, 'ano' => $ano, 'valor' => 6000, 'estado' => 'paga', 'data_pagamento' => now()]);
+        Quota::create(['user_id' => $semQuota->id, 'ano' => $ano - 1, 'valor' => 6000, 'estado' => 'pendente']);
+
+        $this->actingAs($admin)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 0])->assertSessionHasErrors('valor');
+        $this->actingAs($admin)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 7500, 'marcar_atraso' => '1'])
+            ->assertRedirect()->assertSessionHas('estado');
+
+        $this->assertDatabaseHas('quotas', ['user_id' => $semQuota->id, 'ano' => $ano, 'valor' => 7500, 'estado' => 'pendente']);
+        $this->assertDatabaseHas('quotas', ['user_id' => $aZero->id, 'ano' => $ano, 'valor' => 7500]);
+        $this->assertDatabaseHas('quotas', ['user_id' => $jaPagou->id, 'ano' => $ano, 'valor' => 6000, 'estado' => 'paga']);
+        $this->assertDatabaseMissing('quotas', ['user_id' => $inactivo->id]);
+        $this->assertDatabaseMissing('quotas', ['user_id' => $admin->id]);
+        $this->assertDatabaseHas('quotas', ['user_id' => $semQuota->id, 'ano' => $ano - 1, 'estado' => 'em_atraso']);
+
+        // Lancar de novo nao duplica nem altera nada
+        $this->actingAs($admin)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 9000])->assertRedirect();
+        $this->assertDatabaseCount('quotas', 4);
+        $this->assertDatabaseHas('quotas', ['user_id' => $semQuota->id, 'ano' => $ano, 'valor' => 7500]);
+
+        // Uma conta aprovada depois recebe a quota do ano ja com o valor lancado
+        $this->actingAs($admin)->post('/admin/membros/'.$inactivo->id.'/aprovar')->assertRedirect();
+        $this->assertDatabaseHas('quotas', ['user_id' => $inactivo->id, 'ano' => $ano, 'valor' => 7500]);
+
+        $financeiroSoLeitura = User::factory()->create();
+        $financeiroSoLeitura->forceFill(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'standard'])->save();
+        $this->actingAs($financeiroSoLeitura)->post('/admin/quotas/lancar', ['ano' => $ano, 'valor' => 1])->assertForbidden();
+    }
+
+    public function test_admin_regista_pagamento_e_membro_emite_comprovativo(): void
+    {
+        $admin = $this->admin();
+        $membro = User::factory()->create(['carteira' => '456789', 'ativo' => true]);
+
+        $this->actingAs($admin)->post('/admin/quotas', [
+            'user_id' => $membro->id,
+            'ano' => 2026,
+            'valor' => 7500,
+            'estado' => 'paga',
+            'referencia' => 'REC-2026-001',
+            'data_pagamento' => '2026-11-12',
+        ])->assertRedirect();
+
+        $quota = Quota::where('user_id', $membro->id)->firstOrFail();
+        $pendente = Quota::create(['user_id' => $membro->id, 'ano' => 2025, 'valor' => 5000, 'estado' => 'pendente']);
+        $this->actingAs($admin)->post('/admin/quotas/'.$pendente->id, [
+            'estado' => 'paga',
+            'valor' => 5000,
+            'referencia' => 'REC-2025-001',
+            'data_pagamento' => '',
+        ])->assertRedirect();
+        $this->assertNotNull($pendente->refresh()->data_pagamento);
+
+        $this->actingAs($membro)->get('/membro')->assertOk()->assertSee('Regularizada')->assertSee('7.500 MT');
+        $this->actingAs($membro)->get('/membro/quotas/'.$quota->id.'/comprovativo')
+            ->assertOk()->assertSee('REC-2026-001')->assertSee('CDA-Q');
+    }
+
+    public function test_niveis_de_acesso_separam_adesoes_financas_e_conteudos(): void
+    {
+        $editor = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'editor']);
+        $adesoes = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'adesoes']);
+        $financeiro = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'financeiro']);
+        $standard = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'standard']);
+
+        $this->actingAs($editor)->get('/admin/paginas')->assertOk();
+        $this->actingAs($editor)->get('/admin/membros')->assertForbidden();
+        $this->actingAs($adesoes)->get('/admin/membros')->assertOk();
+        $this->actingAs($adesoes)->get('/admin/quotas')->assertForbidden();
+        $this->actingAs($financeiro)->get('/admin/quotas')->assertOk();
+        $this->actingAs($financeiro)->get('/admin/paginas')->assertForbidden();
+        $this->actingAs($standard)->get('/admin/membros')->assertOk();
+        $this->actingAs($standard)->get('/admin/quotas')->assertOk();
+        $this->actingAs($standard)->post('/admin/quotas', [])->assertForbidden();
+        $this->actingAs($standard)->get('/admin/utilizadores')->assertForbidden();
+    }
+
+    public function test_declaracao_pdf_e_qr_reflectem_regularidade_actual(): void
+    {
+        $membro = User::factory()->create(['carteira' => '777888', 'ativo' => true]);
+        $quota = Quota::create([
+            'user_id' => $membro->id,
+            'ano' => now()->year,
+            'valor' => 7500,
+            'estado' => 'paga',
+            'referencia' => 'Q-REGULAR',
+            'data_pagamento' => now(),
+        ]);
+
+        $this->actingAs($membro)->get('/membro/declaracao-quitacao')
+            ->assertOk()->assertSee('Declaração de Quitação')->assertSee('CDA-CQ-'.now()->year)->assertSee('data:image/png;base64,', false);
+        $pdf = $this->actingAs($membro)->get('/membro/declaracao-quitacao/descarregar');
+        $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+        $this->actingAs($membro)->get('/membro/quotas/'.$quota->id.'/comprovativo/descarregar')
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+
+        $url = URL::signedRoute('regularidade.verificar', ['user' => $membro->id, 'ano' => now()->year]);
+        $this->get($url)->assertOk()->assertSee('Certificado válido')->assertSee('CDA-CQ-'.now()->year);
+
+        $quota->update(['estado' => 'em_atraso', 'data_pagamento' => null]);
+        $this->get($url)->assertOk()->assertSee('Situação não regularizada');
+        $this->actingAs($membro)->get('/membro/declaracao-quitacao')->assertForbidden();
+    }
+
+    public function test_extracto_mostra_debitos_creditos_e_saldo(): void
+    {
+        $membro = User::factory()->create(['carteira' => '555111', 'ativo' => true]);
+        $outro = User::factory()->create(['carteira' => '555222', 'ativo' => true]);
+        Quota::create(['user_id' => $membro->id, 'ano' => now()->year - 1, 'valor' => 6000, 'estado' => 'paga', 'referencia' => 'REF-PAGA', 'data_pagamento' => now()->subYear()->endOfYear()]);
+        Quota::create(['user_id' => $membro->id, 'ano' => now()->year, 'valor' => 7500, 'estado' => 'pendente']);
+        Quota::create(['user_id' => $outro->id, 'ano' => now()->year, 'valor' => 9999, 'estado' => 'pendente']);
+
+        $this->actingAs($membro)->get('/membro/extracto')
+            ->assertOk()
+            ->assertSee('Extracto de conta')
+            ->assertSeeInOrder(['Quota anual de '.(now()->year - 1), 'Pagamento da quota de '.(now()->year - 1), 'Quota anual de '.now()->year])
+            ->assertSee('REF-PAGA')
+            ->assertSee('13.500 MT')
+            ->assertSee('7.500 MT')
+            ->assertDontSee('9.999');
+
+        $this->actingAs($membro)->get('/membro/extracto/documento')
+            ->assertOk()->assertSee('Extracto de Conta Corrente')->assertSee('CDA-EX-');
+        $pdf = $this->actingAs($membro)->get('/membro/extracto/descarregar');
+        $pdf->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdf->getContent());
+
+        $this->actingAs($membro)->get('/membro/documentos')->assertOk()->assertSee('Declaração de quitação')->assertSee('Extracto de conta');
+    }
+
+    public function test_tesouraria_consulta_extracto_e_filtra_quotas(): void
+    {
+        $membro = User::factory()->create(['carteira' => '555333', 'ativo' => true]);
+        Quota::create(['user_id' => $membro->id, 'ano' => now()->year, 'valor' => 4200, 'estado' => 'em_atraso']);
+        $financeiro = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'financeiro']);
+        $editor = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'editor']);
+
+        $this->actingAs($financeiro)->get('/admin/quotas')
+            ->assertOk()
+            ->assertSee('data-separadores="#tabela-quotas"', false)
+            ->assertSee('data-grupo="em_atraso"', false)
+            ->assertSee(route('admin.membros.extracto', $membro), false);
+
+        $this->actingAs($financeiro)->get('/admin/membros/'.$membro->id.'/extracto')
+            ->assertOk()->assertSee('Extracto de Conta Corrente')->assertSee('4.200')->assertSee(route('admin.membros.extracto', [$membro, 'pdf' => 1]), false);
+        $this->actingAs($financeiro)->get('/admin/membros/'.$membro->id.'/extracto?pdf=1')
+            ->assertOk()->assertHeader('Content-Type', 'application/pdf');
+        $this->actingAs($editor)->get('/admin/membros/'.$membro->id.'/extracto')->assertForbidden();
+        $this->actingAs($financeiro)->get('/admin/membros/'.$financeiro->id.'/extracto')->assertNotFound();
+    }
+
+    public function test_painel_e_listas_da_administracao_organizados(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'super_admin']);
+        $editor = User::factory()->create(['is_admin' => true, 'ativo' => true, 'nivel_acesso' => 'editor']);
+        $proximo = new Evento(['titulo' => 'Seminário que vem', 'slug' => 'seminario-que-vem', 'data_evento' => now()->addMonth(), 'activo' => true]);
+        $proximo->forceFill(['blocos' => []])->save();
+        $passado = new Evento(['titulo' => 'Encontro passado', 'slug' => 'encontro-passado', 'data_evento' => now()->subMonth(), 'activo' => true]);
+        $passado->forceFill(['blocos' => []])->save();
+        Quota::create(['user_id' => User::factory()->create(['ativo' => true])->id, 'ano' => now()->year, 'valor' => 5000, 'estado' => 'paga', 'data_pagamento' => now()]);
+
+        $this->actingAs($admin)->get('/admin')->assertOk()
+            ->assertSee('Por tratar')->assertSee('Quotas de '.now()->year)->assertSee('1 de 1')->assertSee('Criar')->assertSee('Num relance');
+        // O editor so ve o que pode gerir: sem tarefas de membros nem quotas
+        $this->actingAs($editor)->get('/admin')->assertOk()
+            ->assertSee('Notícias recentes')->assertDontSee('Quotas de '.now()->year)->assertDontSee('Contas por aprovar');
+
+        $this->actingAs($admin)->get('/admin/eventos')->assertOk()
+            ->assertSee('data-separadores="#tabela-eventos"', false)
+            ->assertSee('data-grupo="proximo"', false)
+            ->assertSee('data-grupo="passado"', false);
+        $this->actingAs($admin)->get('/admin/noticias')->assertOk()->assertSee('Ainda não há notícias');
+    }
+
+    public function test_copia_de_seguranca_inclui_base_e_ficheiros_e_apaga_antigas(): void
+    {
+        $pasta = storage_path('framework/testing/copias-'.uniqid());
+        $ficheiros = storage_path('framework/testing/carregados-'.uniqid());
+        File::ensureDirectoryExists($ficheiros.'/sub');
+        File::put($ficheiros.'/sub/talao.pdf', 'conteudo');
+        File::ensureDirectoryExists($pasta);
+        File::put($pasta.'/cda-digital-2000-01-01-000000.zip', 'antiga');
+        config(['cda.copias.pasta' => $pasta, 'cda.copias.manter' => 1, 'cda.copias.pastas' => ['teste' => $ficheiros]]);
+        // VACUUM INTO nao corre dentro de transaccao; a de RefreshDatabase e reaberta no fim (nada e escrito)
+        DB::commit();
+
+        try {
+            $this->artisan('cda:copia-seguranca')->assertSuccessful();
+
+            $copias = File::glob($pasta.'/cda-digital-*.zip');
+            $this->assertCount(1, $copias);
+            $this->assertStringNotContainsString('2000-01-01', $copias[0]);
+
+            $zip = new \ZipArchive;
+            $this->assertTrue($zip->open($copias[0]));
+            $this->assertNotFalse($zip->locateName('database/database.sqlite'));
+            $this->assertNotFalse($zip->locateName('LEIA-ME.txt'));
+            $prefixo = Str::after(str_replace('\\', '/', $ficheiros), str_replace('\\', '/', base_path()).'/');
+            $this->assertNotFalse($zip->locateName($prefixo.'/sub/talao.pdf'));
+            $base = $zip->getFromName('database/database.sqlite');
+            $zip->close();
+            $this->assertStringStartsWith('SQLite format 3', $base);
+            $this->assertStringContainsString('CREATE TABLE "quotas"', $base);
+        } finally {
+            DB::beginTransaction();
+            File::deleteDirectory($pasta);
+            File::deleteDirectory($ficheiros);
+        }
+    }
+
+    public function test_proxies_de_confianca_detectam_https(): void
+    {
+        $pedido = fn () => $this->withHeaders(['X-Forwarded-Proto' => 'https', 'X-Forwarded-Port' => '443'])->get('/');
+
+        $pedido()->assertOk()->assertHeaderMissing('Strict-Transport-Security');
+
+        TrustProxies::at('*');
+        try {
+            $pedido()->assertOk()->assertHeader('Strict-Transport-Security');
+        } finally {
+            TrustProxies::flushState();
+        }
+    }
+}

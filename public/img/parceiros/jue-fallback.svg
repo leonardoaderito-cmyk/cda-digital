@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Janela Única Electrónica (JUE)">
+  <rect width="256" height="256" rx="30" fill="#ffffff"/>
+  <circle cx="128" cy="128" r="100" fill="#0d5cb6"/>
+  <circle cx="128" cy="128" r="100" fill="none" stroke="#0a4a92" stroke-width="6"/>
+  <text x="128" y="132" text-anchor="middle" dominant-baseline="central"
+        font-family="Montserrat, Arial, Helvetica, sans-serif" font-weight="800"
+        font-size="74" letter-spacing="2" fill="#ffffff">JUE</text>
+</svg>

@@ -1,0 +1,46 @@
+# Leonardo (leonardoaderito-cmyk): corre os testes e verifica o estilo do codigo em cada push e pull request
+name: Testes
+
+on:
+  push:
+    branches: [main, copilot-continuacao]
+  pull_request:
+
+concurrency:
+  group: testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: gd, zip, intl, mbstring, pdo_sqlite
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Dependências PHP
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Estilo do código (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Recursos (Vite)
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Testes
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan test

@@ -23,3 +23,6 @@
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
+# Leonardo (leonardoaderito-cmyk): revistas em PDF ate 80 MB (84 MB com o resto do formulario)
+LimitRequestBody 88080384

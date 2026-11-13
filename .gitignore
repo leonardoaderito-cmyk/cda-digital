@@ -25,3 +25,12 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Leonardo (leonardoaderito-cmyk): dados criados pela plataforma (ficam no servidor e nas copias de seguranca)
+/public/img/media
+/acervo/revistas
+/public/img/eventos
+/public/video/eventos
+/output
+/dist
+/bootstrap/pasta-publica.php
