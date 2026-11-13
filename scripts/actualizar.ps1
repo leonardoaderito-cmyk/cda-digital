@@ -22,7 +22,9 @@ Artisan cda:copia-seguranca --apenas-base
 $temporaria = Join-Path $env:TEMP ('cda-digital-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $temporaria | Out-Null
 Write-Host '==> A extrair o pacote'
-Expand-Archive -Path $Pacote -DestinationPath $temporaria
+# Leonardo (leonardoaderito-cmyk): tar do Windows em vez de Expand-Archive, que e lento e falhava a meio com este pacote
+& tar -x -f $Pacote -C $temporaria
+if ($LASTEXITCODE -ne 0) { throw 'Falhou a extraccao do pacote' }
 $novo = Join-Path $temporaria 'cda-digital'
 
 Artisan down --retry=60 --refresh=15
@@ -47,6 +49,10 @@ try {
     }
 } finally {
     Artisan up
-    Remove-Item -Recurse -Force $temporaria
+    # Leonardo (leonardoaderito-cmyk): alguns PDFs do acervo passam os 260 caracteres de caminho; o robocopy esvazia a pasta antes do Remove-Item
+    $vazia = Join-Path $env:TEMP ('cda-vazia-' + [guid]::NewGuid())
+    New-Item -ItemType Directory -Path $vazia | Out-Null
+    & robocopy $vazia $temporaria /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    Remove-Item -Recurse -Force $temporaria, $vazia
 }
 Write-Host 'Portal actualizado.' -ForegroundColor Green
