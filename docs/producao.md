@@ -99,3 +99,20 @@ O assistente aparece no canto inferior direito de todas as páginas públicas.
 - **Erros escondidos:** um endereço inexistente deve mostrar a página 404 do portal, sem detalhes técnicos (`APP_DEBUG=false`).
 - **Email:** pedir a recuperação de senha de uma conta de teste e confirmar que o email chega.
 - **Logs:** os erros ficam em `storage\logs\laravel-AAAA-MM-DD.log`.
+
+### Actualização rápida (só o que mudou)
+Para não copiar 280 MB de cada vez, há um pacote só com os ficheiros novos ou alterados desde o último pacote completo
+(`cda-digital-vps-actualizacao-AAAA-MM-DD.zip`, normalmente com menos de 1 MB):
+```powershell
+cd C:\inetpub\cda-digital
+powershell -ExecutionPolicy Bypass -File scripts\actualizar-parcial.ps1 -Pacote C:\caminho\cda-digital-vps-actualizacao-AAAA-MM-DD.zip
+```
+- Na primeira vez, o `scripts\actualizar-parcial.ps1` ainda não existe na VPS: extraia o zip e copie `cda-digital\scripts\actualizar-parcial.ps1` para `C:\inetpub\cda-digital\scripts\` antes de correr o comando.
+- O script faz o mesmo que o `actualizar.ps1`: cópia da base de dados, manutenção, cópia dos ficheiros, migrações e caches. Também apaga os ficheiros listados em `REMOVER.txt`, mas nunca toca em `acervo\`, `storage\`, na base de dados nem no `.env`.
+- O pacote parcial só serve se a VPS tiver a versão indicada em `ACTUALIZACAO.txt`, ou uma mais recente. Em caso de dúvida, use o pacote completo.
+
+**Preparar o pacote parcial** (no computador de desenvolvimento), comparando com o último pacote completo instalado:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\empacotar.ps1 -Tipo vps
+powershell -ExecutionPolicy Bypass -File scripts\empacotar-actualizacao.ps1 -Base dist\cda-digital-vps-AAAA-MM-DD.zip
+```
