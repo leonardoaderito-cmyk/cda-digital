@@ -10,13 +10,14 @@
     // Carrossel: slides definidos em Administracao > Carrossel; sem nenhum activo, mostra as ultimas noticias
     $destaques = $slides->map(fn ($s) => [
         'etiqueta' => $s->etiqueta, 'titulo' => $s->titulo, 'texto' => $s->texto, 'imagem' => $s->imagem,
-        'botao' => $s->botao_url ? ($s->botao_texto ?: 'Saber mais') : null, 'url' => $s->botao_url,
+        'botao' => $s->botao_url ? ($s->botao_texto ?: 'Saber mais') : null, 'url' => $s->botao_url, 'data' => null,
     ]);
     if ($destaques->isEmpty() && $noticiasActivas) {
         $destaques = $noticias->take(4)->map(fn ($n) => [
             'etiqueta' => $n->categoria ?: 'Notícia', 'titulo' => $n->titulo,
             'texto' => trim($n->data?->format('d/m/Y').' · '.Str::limit($n->resumo, 150), ' ·'),
             'imagem' => $n->imagem ? $imagemDe($n->imagem) : null, 'botao' => 'Ler mais', 'url' => route('noticia', $n->slug),
+            'data' => $n->data?->format('d/m/Y'),
         ]);
     }
     $meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -30,12 +31,21 @@
             @foreach ($destaques as $d)
                 <article data-slide class="slide {{ $loop->first ? 'slide-activo' : '' }} {{ $d['imagem'] ? '' : 'slide-sem-imagem' }}">
                     @if ($d['imagem'])<img src="{{ $d['imagem'] }}" alt="" class="slide-imagem">@endif
-                    <div class="slide-texto">
-                        @if ($d['etiqueta'])<span class="slide-etiqueta">{{ $d['etiqueta'] }}</span>@endif
-                        <h1>{{ $d['titulo'] }}</h1>
-                        @if ($d['texto'])<p>{{ $d['texto'] }}</p>@endif
-                        @if ($d['botao'])<a href="{{ $d['url'] }}" class="slide-ligacao">{{ $d['botao'] }}</a>@endif
-                    </div>
+                    @if ($d['imagem'])
+                        {{-- Com imagem: etiqueta no canto e faixa a toda a largura com o titulo (ligacao) e a data --}}
+                        @if ($d['etiqueta'])<span class="slide-canto">{{ $d['etiqueta'] }}</span>@endif
+                        <div class="slide-faixa">
+                            <h1>@if ($d['url'])<a href="{{ $d['url'] }}">{{ $d['titulo'] }}</a>@else{{ $d['titulo'] }}@endif</h1>
+                            @if ($d['data'])<span class="slide-data">/ {{ $d['data'] }}</span>@endif
+                        </div>
+                    @else
+                        <div class="slide-texto">
+                            @if ($d['etiqueta'])<span class="slide-etiqueta">{{ $d['etiqueta'] }}</span>@endif
+                            <h1>{{ $d['titulo'] }}</h1>
+                            @if ($d['texto'])<p>{{ $d['texto'] }}</p>@endif
+                            @if ($d['botao'])<a href="{{ $d['url'] }}" class="slide-ligacao">{{ $d['botao'] }}</a>@endif
+                        </div>
+                    @endif
                 </article>
             @endforeach
             @if ($destaques->count() > 1)
@@ -101,31 +111,6 @@
         </section>
         @endif
 
-        @if ($revista && Pagina::estaActiva('revista'))
-        <section class="lateral-bloco">
-            <div class="titulo-seccao">
-                <h2><small>Publicação oficial</small>Revista</h2>
-                <a href="{{ route('revista') }}">Edições</a>
-            </div>
-            {{-- Cartao da ultima edicao: capa pequena + titulo, data e botao para o PDF --}}
-            <div class="lateral-revista">
-                <a href="{{ route('revista.abrir', $revista) }}" target="_blank" rel="noopener" class="lateral-revista-capa" aria-label="Abrir a revista {{ $revista->nome() }} (PDF)">
-                    @if ($revista->capa)
-                        <img src="{{ $revista->capa }}" alt="">
-                    @else
-                        <span class="revista-sem-capa"><strong>{{ $revista->titulo }}</strong></span>
-                    @endif
-                </a>
-                <div class="lateral-revista-texto">
-                    <small>Edição mais recente</small>
-                    <strong>{{ $revista->titulo }}</strong>
-                    <span>{{ collect([$revista->edicao, $revista->data_publicacao?->format('d/m/Y')])->filter()->implode(' · ') }}</span>
-                    <a href="{{ route('revista.abrir', $revista) }}" target="_blank" rel="noopener" class="lateral-revista-botao"><x-icone nome="picture_as_pdf" /> Abrir PDF</a>
-                </div>
-            </div>
-        </section>
-        @endif
-
         @if ($documentosActivos && $publicacoes->isNotEmpty())
         <section class="lateral-bloco">
             <div class="titulo-seccao">
@@ -169,6 +154,32 @@
                     <li class="lateral-vazio">Consulte brevemente os próximos eventos da CDA.</li>
                 @endforelse
             </ul>
+        </section>
+        @endif
+
+        @if ($revista && Pagina::estaActiva('revista'))
+        {{-- Revista em destaque: capa grande, fica visivel ao descer a pagina --}}
+        <section class="lateral-bloco lateral-destaque-revista">
+            <div class="titulo-seccao">
+                <h2><small>Publicação oficial</small>Revista em destaque</h2>
+                <a href="{{ route('revista') }}">Edições</a>
+            </div>
+            <a href="{{ route('revista.abrir', $revista) }}" target="_blank" rel="noopener" class="destaque-revista-capa" aria-label="Ler a revista {{ $revista->nome() }} (PDF)">
+                @if ($revista->capa)
+                    <img src="{{ $revista->capa }}" alt="Capa da revista {{ $revista->nome() }}">
+                @else
+                    <span class="revista-sem-capa"><strong>{{ $revista->titulo }}</strong></span>
+                @endif
+                <span class="destaque-revista-selo">Nova edição</span>
+            </a>
+            <div class="destaque-revista-texto">
+                <strong>{{ $revista->titulo }}</strong>
+                <span>{{ collect([$revista->edicao, $revista->data_publicacao?->format('d/m/Y')])->filter()->implode(' · ') }}</span>
+                <div class="destaque-revista-accoes">
+                    <a href="{{ route('revista.abrir', $revista) }}" target="_blank" rel="noopener" class="destaque-revista-ler"><x-icone nome="auto_stories" /> Ler a revista</a>
+                    <a href="{{ route('revista') }}" class="destaque-revista-edicoes">Todas as edições</a>
+                </div>
+            </div>
         </section>
         @endif
     </aside>
